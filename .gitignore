@@ -14,3 +14,9 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Local project notes
+/ISSUES_COMPARISON.md
+/KNOWN_ISSUES.md
+/NOTES_INTERNES.md
+/PROJECT_CONTEXT.md
