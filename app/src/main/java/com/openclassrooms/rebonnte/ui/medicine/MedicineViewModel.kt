@@ -17,10 +17,17 @@ import androidx.core.content.edit
 
 class MedicineViewModel(application: Application) : AndroidViewModel(application) {
     private val preferences = application.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
+    private val _errorMessage = MutableStateFlow<String?>(null)
+    val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
     private val _medicines = MutableStateFlow(loadMedicines())
     val medicines: StateFlow<List<Medicine>> = _medicines.asStateFlow()
 
     fun addRandomMedicine(aisles: List<Aisle>) {
+        if (aisles.isEmpty()) {
+            showError("Ajoutez un rayon avant d'ajouter un médicament.")
+            return
+        }
+
         val currentMedicines = ArrayList(medicines.value)
         currentMedicines.add(
             Medicine(
@@ -32,6 +39,10 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
         )
         _medicines.value = currentMedicines
         persistMedicines()
+    }
+
+    fun clearError() {
+        _errorMessage.value = null
     }
 
     fun filterByName(name: String) {
@@ -120,7 +131,10 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
                     histories = histories
                 )
             }
-        }.getOrElse { emptyList() }
+        }.getOrElse {
+            showError("Impossible de lire les médicaments enregistrés.")
+            emptyList()
+        }
     }
 
     private fun persistMedicines() {
@@ -145,9 +159,17 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
             medicinesArray.put(medicineObject)
         }
 
-        preferences.edit {
-          putString(MEDICINES_KEY, medicinesArray.toString())
+        runCatching {
+            preferences.edit {
+                putString(MEDICINES_KEY, medicinesArray.toString())
+            }
+        }.onFailure {
+            showError("Impossible d'enregistrer les médicaments.")
         }
+    }
+
+    private fun showError(message: String) {
+        _errorMessage.value = message
     }
 
     private companion object {
