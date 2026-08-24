@@ -19,7 +19,8 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
     private val preferences = application.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
-    private val _medicines = MutableStateFlow(loadMedicines())
+    private var allMedicines: List<Medicine> = emptyList()
+    private val _medicines = MutableStateFlow(loadMedicines().also { allMedicines = it })
     val medicines: StateFlow<List<Medicine>> = _medicines.asStateFlow()
 
     fun addRandomMedicine(aisles: List<Aisle>) {
@@ -28,16 +29,17 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
             return
         }
 
-        val currentMedicines = ArrayList(medicines.value)
-        currentMedicines.add(
+        val updatedMedicines = ArrayList(allMedicines)
+        updatedMedicines.add(
             Medicine(
-                "Medicine " + (currentMedicines.size + 1),
+                "Medicine " + (updatedMedicines.size + 1),
                 Random().nextInt(100),
                 aisles[Random().nextInt(aisles.size)].name,
                 emptyList()
             )
         )
-        _medicines.value = currentMedicines
+        allMedicines = updatedMedicines
+        _medicines.value = allMedicines
         persistMedicines()
     }
 
@@ -46,41 +48,33 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun filterByName(name: String) {
-        val currentMedicines: List<Medicine> = medicines.value
-        val filteredMedicines: MutableList<Medicine> = ArrayList()
-        for (medicine in currentMedicines) {
-            if (medicine.name.lowercase(Locale.getDefault())
-                    .contains(name.lowercase(Locale.getDefault()))
-            ) {
-                filteredMedicines.add(medicine)
-            }
+        val normalizedName = name.lowercase(Locale.getDefault())
+        _medicines.value = allMedicines.filter { medicine ->
+            medicine.name.lowercase(Locale.getDefault()).contains(normalizedName)
         }
-        _medicines.value = filteredMedicines
     }
 
     fun sortByNone() {
-        _medicines.value = medicines.value.toMutableList() // Pas de tri
+        _medicines.value = allMedicines
     }
 
     fun sortByName() {
-        val currentMedicines = ArrayList(medicines.value)
-        currentMedicines.sortWith(Comparator.comparing(Medicine::name))
-        _medicines.value = currentMedicines
+        allMedicines = allMedicines.sortedBy { it.name }
+        _medicines.value = allMedicines
     }
 
     fun sortByStock() {
-        val currentMedicines = ArrayList(medicines.value)
-        currentMedicines.sortWith(Comparator.comparingInt(Medicine::stock))
-        _medicines.value = currentMedicines
+        allMedicines = allMedicines.sortedBy { it.stock }
+        _medicines.value = allMedicines
     }
 
     fun updateStock(medicineName: String, delta: Int) {
-        val currentMedicines = medicines.value.toMutableList()
-        val medicineIndex = currentMedicines.indexOfFirst { it.name == medicineName }
+        val updatedMedicines = allMedicines.toMutableList()
+        val medicineIndex = updatedMedicines.indexOfFirst { it.name == medicineName }
 
         if (medicineIndex == -1) return
 
-        val medicine = currentMedicines[medicineIndex]
+        val medicine = updatedMedicines[medicineIndex]
         val updatedStock = (medicine.stock + delta).coerceAtLeast(0)
 
         if (updatedStock == medicine.stock) return
@@ -92,16 +86,20 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
             date = Date().toString(),
             details = "Stock $direction from ${medicine.stock} to $updatedStock"
         )
-        currentMedicines[medicineIndex] = medicine.copy(
+        updatedMedicines[medicineIndex] = medicine.copy(
             stock = updatedStock,
             histories = medicine.histories + history
         )
-        _medicines.value = currentMedicines
+        allMedicines = updatedMedicines
+        _medicines.value = medicines.value.map { currentMedicine ->
+            allMedicines.first { it.name == currentMedicine.name }
+        }
         persistMedicines()
     }
 
     fun reload() {
-        _medicines.value = loadMedicines()
+        allMedicines = loadMedicines()
+        _medicines.value = allMedicines
     }
 
     private fun loadMedicines(): List<Medicine> {
@@ -139,7 +137,7 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
 
     private fun persistMedicines() {
         val medicinesArray = JSONArray()
-        medicines.value.forEach { medicine ->
+        allMedicines.forEach { medicine ->
             val medicineObject = JSONObject()
                 .put("name", medicine.name)
                 .put("stock", medicine.stock)
