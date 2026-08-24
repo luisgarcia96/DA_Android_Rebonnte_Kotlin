@@ -49,6 +49,18 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
         persistMedicines()
     }
 
+    fun updateMedicine(originalName: String, updatedMedicine: Medicine) {
+        val updatedMedicines = allMedicines.toMutableList()
+        val medicineIndex = updatedMedicines.indexOfFirst { it.name == originalName }
+
+        if (medicineIndex == -1) return
+
+        updatedMedicines[medicineIndex] = updatedMedicine
+        allMedicines = updatedMedicines
+        _medicines.value = allMedicines
+        persistMedicines()
+    }
+
     fun clearError() {
         _errorMessage.value = null
     }

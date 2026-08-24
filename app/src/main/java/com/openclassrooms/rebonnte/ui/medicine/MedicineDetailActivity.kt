@@ -40,23 +40,25 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.openclassrooms.rebonnte.ui.history.History
+import com.openclassrooms.rebonnte.ui.aisle.AisleViewModel
 import com.openclassrooms.rebonnte.ui.theme.RebonnteTheme
 
 class MedicineDetailActivity : ComponentActivity() {
     private val viewModel: MedicineViewModel by viewModels()
+    private val aisleViewModel: AisleViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val name = intent.getStringExtra("nameMedicine") ?: "Unknown"
         val isNewMedicine = intent.getBooleanExtra("isNewMedicine", false)
-        val aisleNames = intent.getStringArrayListExtra("aisleNames") ?: arrayListOf()
+        val aisleNames = aisleViewModel.aisles.value.map { it.name }
 
         setContent {
             RebonnteTheme {
                 if (isNewMedicine) {
                     NewMedicineScreen(aisleNames, viewModel, onSaved = ::finish)
                 } else {
-                    MedicineDetailScreen(name, viewModel)
+                    MedicineDetailScreen(name, aisleNames, viewModel)
                 }
             }
         }
@@ -141,9 +143,19 @@ fun NewMedicineScreen(
 }
 
 @Composable
-fun MedicineDetailScreen(name: String, viewModel: MedicineViewModel) {
+fun MedicineDetailScreen(
+    name: String,
+    aisleNames: List<String>,
+    viewModel: MedicineViewModel
+) {
     val medicines by viewModel.medicines.collectAsState(initial = emptyList())
-    val medicine = medicines.find { it.name == name } ?: return
+    var currentMedicineName by rememberSaveable { mutableStateOf(name) }
+    var isEditing by rememberSaveable { mutableStateOf(false) }
+    val medicine = medicines.find { it.name == currentMedicineName } ?: return
+    var editedName by rememberSaveable { mutableStateOf(medicine.name) }
+    var editedAisle by rememberSaveable { mutableStateOf(medicine.nameAisle) }
+    var editedStock by rememberSaveable { mutableStateOf(medicine.stock.toString()) }
+    var isAisleMenuExpanded by rememberSaveable { mutableStateOf(false) }
 
     Scaffold { paddingValues ->
         Column(
@@ -152,48 +164,107 @@ fun MedicineDetailScreen(name: String, viewModel: MedicineViewModel) {
                 .padding(16.dp)
         ) {
             TextField(
-                value = medicine.name,
-                onValueChange = {},
+                value = if (isEditing) editedName else medicine.name,
+                onValueChange = { editedName = it },
                 label = { Text("Name") },
-                enabled = false,
+                enabled = isEditing,
                 modifier = Modifier.fillMaxWidth()
             )
             Spacer(modifier = Modifier.height(8.dp))
-            TextField(
-                value = medicine.nameAisle,
-                onValueChange = {},
-                label = { Text("Aisle") },
-                enabled = false,
-                modifier = Modifier.fillMaxWidth()
-            )
+            if (isEditing) {
+                Box {
+                    OutlinedButton(
+                        onClick = { isAisleMenuExpanded = true },
+                        enabled = aisleNames.isNotEmpty(),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(text = editedAisle.ifEmpty { "Select an aisle" })
+                    }
+                    DropdownMenu(
+                        expanded = isAisleMenuExpanded,
+                        onDismissRequest = { isAisleMenuExpanded = false }
+                    ) {
+                        aisleNames.forEach { aisleName ->
+                            DropdownMenuItem(
+                                text = { Text(aisleName) },
+                                onClick = {
+                                    editedAisle = aisleName
+                                    isAisleMenuExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+            } else {
+                TextField(
+                    value = medicine.nameAisle,
+                    onValueChange = {},
+                    label = { Text("Aisle") },
+                    enabled = false,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
             Spacer(modifier = Modifier.height(8.dp))
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
+            if (isEditing) {
+                TextField(
+                    value = editedStock,
+                    onValueChange = { editedStock = it },
+                    label = { Text("Stock") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            } else {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    IconButton(onClick = {
+                        viewModel.updateStock(medicine.name, -1)
+                    }) {
+                        Icon(
+                            imageVector = Icons.Filled.KeyboardArrowDown,
+                            contentDescription = "Minus One"
+                        )
+                    }
+                    TextField(
+                        value = medicine.stock.toString(),
+                        onValueChange = {},
+                        label = { Text("Stock") },
+                        enabled = false,
+                        modifier = Modifier.weight(1f)
+                    )
+                    IconButton(onClick = {
+                        viewModel.updateStock(medicine.name, 1)
+                    }) {
+                        Icon(
+                            imageVector = Icons.Default.KeyboardArrowUp,
+                            contentDescription = "Plus One"
+                        )
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+            Button(
+                onClick = {
+                    if (isEditing) {
+                        viewModel.updateMedicine(
+                            medicine.name,
+                            medicine.copy(
+                                name = editedName,
+                                nameAisle = editedAisle,
+                                stock = editedStock.toIntOrNull() ?: medicine.stock
+                            )
+                        )
+                        currentMedicineName = editedName
+                    } else {
+                        editedName = medicine.name
+                        editedAisle = medicine.nameAisle
+                        editedStock = medicine.stock.toString()
+                    }
+                    isEditing = !isEditing
+                },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                IconButton(onClick = {
-                    viewModel.updateStock(medicine.name, -1)
-                }) {
-                    Icon(
-                        imageVector = Icons.Filled.KeyboardArrowDown,
-                        contentDescription = "Minus One"
-                    )
-                }
-                TextField(
-                    value = medicine.stock.toString(),
-                    onValueChange = {},
-                    label = { Text("Stock") },
-                    enabled = false,
-                    modifier = Modifier.weight(1f)
-                )
-                IconButton(onClick = {
-                    viewModel.updateStock(medicine.name, 1)
-                }) {
-                    Icon(
-                        imageVector = Icons.Default.KeyboardArrowUp,
-                        contentDescription = "Plus One"
-                    )
-                }
+                Text(if (isEditing) "Save" else "Edit")
             }
             Spacer(modifier = Modifier.height(16.dp))
             Text(text = "History", style = MaterialTheme.typography.titleLarge)
