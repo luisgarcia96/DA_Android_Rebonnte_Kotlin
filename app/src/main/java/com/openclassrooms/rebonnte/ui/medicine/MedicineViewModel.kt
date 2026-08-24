@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.Date
 import java.util.Locale
 import java.util.Random
 import androidx.core.content.edit
@@ -73,7 +74,17 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
 
         if (updatedStock == medicine.stock) return
 
-        currentMedicines[medicineIndex] = medicine.copy(stock = updatedStock)
+        val direction = if (delta > 0) "increased" else "decreased"
+        val history = History(
+            medicineName = medicine.name,
+            userId = LOCAL_USER_ID,
+            date = Date().toString(),
+            details = "Stock $direction from ${medicine.stock} to $updatedStock"
+        )
+        currentMedicines[medicineIndex] = medicine.copy(
+            stock = updatedStock,
+            histories = medicine.histories + history
+        )
         _medicines.value = currentMedicines
         persistMedicines()
     }
@@ -139,5 +150,6 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
         const val PREFERENCES_NAME = "rebonnte_preferences"
         const val MEDICINES_KEY = "medicines"
         const val HISTORIES_KEY = "histories"
+        const val LOCAL_USER_ID = "local-user"
     }
 }
