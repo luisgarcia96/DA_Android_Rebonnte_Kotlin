@@ -89,6 +89,10 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
         persistMedicines()
     }
 
+    fun reload() {
+        _medicines.value = loadMedicines()
+    }
+
     private fun loadMedicines(): List<Medicine> {
         val storedMedicines = preferences.getString(MEDICINES_KEY, null) ?: return emptyList()
         return runCatching {
