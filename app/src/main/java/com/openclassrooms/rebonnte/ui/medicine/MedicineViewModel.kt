@@ -1,20 +1,23 @@
 package com.openclassrooms.rebonnte.ui.medicine
 
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import android.content.Context
+import androidx.lifecycle.AndroidViewModel
 import com.openclassrooms.rebonnte.ui.aisle.Aisle
+import com.openclassrooms.rebonnte.ui.history.History
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import org.json.JSONArray
+import org.json.JSONObject
 import java.util.Locale
 import java.util.Random
+import androidx.core.content.edit
 
-class MedicineViewModel : ViewModel() {
-    private val _medicines = MutableStateFlow<List<Medicine>>(emptyList())
+class MedicineViewModel(application: Application) : AndroidViewModel(application) {
+    private val preferences = application.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
+    private val _medicines = MutableStateFlow(loadMedicines())
     val medicines: StateFlow<List<Medicine>> = _medicines.asStateFlow()
-
-    init {
-        _medicines.value = ArrayList() // Initialiser avec une liste vide
-    }
 
     fun addRandomMedicine(aisles: List<Aisle>) {
         val currentMedicines = ArrayList(medicines.value)
@@ -27,6 +30,7 @@ class MedicineViewModel : ViewModel() {
             )
         )
         _medicines.value = currentMedicines
+        persistMedicines()
     }
 
     fun filterByName(name: String) {
@@ -71,5 +75,69 @@ class MedicineViewModel : ViewModel() {
 
         currentMedicines[medicineIndex] = medicine.copy(stock = updatedStock)
         _medicines.value = currentMedicines
+        persistMedicines()
+    }
+
+    private fun loadMedicines(): List<Medicine> {
+        val storedMedicines = preferences.getString(MEDICINES_KEY, null) ?: return emptyList()
+        return runCatching {
+            val medicinesArray = JSONArray(storedMedicines)
+            List(medicinesArray.length()) { index ->
+                val medicineObject = medicinesArray.getJSONObject(index)
+                val historiesArray = medicineObject.optJSONArray(HISTORIES_KEY)
+                val histories = if (historiesArray == null) {
+                    emptyList()
+                } else {
+                    List(historiesArray.length()) { historyIndex ->
+                        val historyObject = historiesArray.getJSONObject(historyIndex)
+                        History(
+                            medicineName = historyObject.getString("medicineName"),
+                            userId = historyObject.getString("userId"),
+                            date = historyObject.getString("date"),
+                            details = historyObject.getString("details")
+                        )
+                    }
+                }
+                Medicine(
+                    name = medicineObject.getString("name"),
+                    stock = medicineObject.getInt("stock"),
+                    nameAisle = medicineObject.getString("nameAisle"),
+                    histories = histories
+                )
+            }
+        }.getOrElse { emptyList() }
+    }
+
+    private fun persistMedicines() {
+        val medicinesArray = JSONArray()
+        medicines.value.forEach { medicine ->
+            val medicineObject = JSONObject()
+                .put("name", medicine.name)
+                .put("stock", medicine.stock)
+                .put("nameAisle", medicine.nameAisle)
+
+            val historiesArray = JSONArray()
+            medicine.histories.forEach { history ->
+                historiesArray.put(
+                    JSONObject()
+                        .put("medicineName", history.medicineName)
+                        .put("userId", history.userId)
+                        .put("date", history.date)
+                        .put("details", history.details)
+                )
+            }
+            medicineObject.put(HISTORIES_KEY, historiesArray)
+            medicinesArray.put(medicineObject)
+        }
+
+        preferences.edit {
+          putString(MEDICINES_KEY, medicinesArray.toString())
+        }
+    }
+
+    private companion object {
+        const val PREFERENCES_NAME = "rebonnte_preferences"
+        const val MEDICINES_KEY = "medicines"
+        const val HISTORIES_KEY = "histories"
     }
 }
