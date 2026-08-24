@@ -5,6 +5,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -41,6 +42,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.DpOffset
@@ -53,6 +55,7 @@ import androidx.navigation.compose.rememberNavController
 import com.openclassrooms.rebonnte.ui.aisle.AisleScreen
 import com.openclassrooms.rebonnte.ui.aisle.AisleViewModel
 import com.openclassrooms.rebonnte.ui.medicine.MedicineScreen
+import com.openclassrooms.rebonnte.ui.medicine.MedicineDetailActivity
 import com.openclassrooms.rebonnte.ui.medicine.MedicineViewModel
 import com.openclassrooms.rebonnte.ui.theme.RebonnteTheme
 
@@ -98,7 +101,7 @@ fun MyApp(
             bottomBar = { MainBottomBar(route, navController) },
             snackbarHost = { SnackbarHost(snackbarHostState) },
             floatingActionButton = {
-                MainFloatingActionButton(route, medicineViewModel, aisleViewModel)
+                MainFloatingActionButton(route, aisleViewModel)
             }
         ) {
             NavHost(
@@ -208,12 +211,16 @@ private fun MainBottomBar(
 @Composable
 private fun MainFloatingActionButton(
     route: String?,
-    medicineViewModel: MedicineViewModel,
     aisleViewModel: AisleViewModel
 ) {
+    val context = LocalContext.current
+
     FloatingActionButton(onClick = {
         when (route) {
-            "medicine" -> medicineViewModel.addRandomMedicine(aisleViewModel.aisles.value)
+            "medicine" -> context.startActivity(
+                Intent(context, MedicineDetailActivity::class.java)
+                    .putExtra("isNewMedicine", true)
+            )
             "aisle" -> aisleViewModel.addRandomAisle()
         }
     }) {

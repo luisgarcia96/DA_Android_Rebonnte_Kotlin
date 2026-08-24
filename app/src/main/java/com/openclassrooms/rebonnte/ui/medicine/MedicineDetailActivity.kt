@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -27,6 +28,9 @@ import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -40,10 +44,70 @@ class MedicineDetailActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val name = intent.getStringExtra("nameMedicine") ?: "Unknown"
+        val isNewMedicine = intent.getBooleanExtra("isNewMedicine", false)
 
         setContent {
             RebonnteTheme {
-                MedicineDetailScreen(name, viewModel)
+                if (isNewMedicine) {
+                    NewMedicineScreen(viewModel, onSaved = ::finish)
+                } else {
+                    MedicineDetailScreen(name, viewModel)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun NewMedicineScreen(viewModel: MedicineViewModel, onSaved: () -> Unit) {
+    var name by rememberSaveable { mutableStateOf("") }
+    var aisle by rememberSaveable { mutableStateOf("") }
+    var stock by rememberSaveable { mutableStateOf("0") }
+
+    Scaffold { paddingValues ->
+        Column(
+            modifier = Modifier
+                .padding(paddingValues)
+                .padding(16.dp)
+        ) {
+            Text(text = "New medicine", style = MaterialTheme.typography.headlineSmall)
+            Spacer(modifier = Modifier.height(16.dp))
+            TextField(
+                value = name,
+                onValueChange = { name = it },
+                label = { Text("Name") },
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            TextField(
+                value = aisle,
+                onValueChange = { aisle = it },
+                label = { Text("Aisle") },
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            TextField(
+                value = stock,
+                onValueChange = { stock = it },
+                label = { Text("Stock") },
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Button(
+                onClick = {
+                    viewModel.addMedicine(
+                        Medicine(
+                            name = name,
+                            stock = stock.toIntOrNull() ?: 0,
+                            nameAisle = aisle,
+                            histories = emptyList()
+                        )
+                    )
+                    onSaved()
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Save")
             }
         }
     }

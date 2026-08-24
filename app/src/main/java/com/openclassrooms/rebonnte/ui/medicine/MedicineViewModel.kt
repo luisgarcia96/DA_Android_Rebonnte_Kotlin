@@ -43,6 +43,12 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
         persistMedicines()
     }
 
+    fun addMedicine(medicine: Medicine) {
+        allMedicines = allMedicines + medicine
+        _medicines.value = allMedicines
+        persistMedicines()
+    }
+
     fun clearError() {
         _errorMessage.value = null
     }
