@@ -3,10 +3,11 @@ package com.openclassrooms.rebonnte.ui.aisle
 import androidx.lifecycle.ViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 class AisleViewModel : ViewModel() {
-    var _aisles = MutableStateFlow<List<Aisle>>(emptyList())
-    val aisles: StateFlow<List<Aisle>> get() = _aisles
+    private val _aisles = MutableStateFlow<List<Aisle>>(emptyList())
+    val aisles: StateFlow<List<Aisle>> = _aisles.asStateFlow()
 
     init {
         _aisles.value = listOf(Aisle("Main Aisle"))
@@ -18,4 +19,3 @@ class AisleViewModel : ViewModel() {
         _aisles.value = currentAisles
     }
 }
-

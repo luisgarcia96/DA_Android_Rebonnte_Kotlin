@@ -26,9 +26,6 @@ import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -37,7 +34,6 @@ import androidx.lifecycle.ViewModelProvider
 import com.openclassrooms.rebonnte.MainActivity
 import com.openclassrooms.rebonnte.ui.history.History
 import com.openclassrooms.rebonnte.ui.theme.RebonnteTheme
-import java.util.Date
 
 class MedicineDetailActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -57,7 +53,6 @@ class MedicineDetailActivity : ComponentActivity() {
 fun MedicineDetailScreen(name: String, viewModel: MedicineViewModel) {
     val medicines by viewModel.medicines.collectAsState(initial = emptyList())
     val medicine = medicines.find { it.name == name } ?: return
-    var stock by remember { mutableStateOf(medicine.stock) }
 
     Scaffold { paddingValues ->
         Column(
@@ -86,17 +81,7 @@ fun MedicineDetailScreen(name: String, viewModel: MedicineViewModel) {
                 modifier = Modifier.fillMaxWidth()
             ) {
                 IconButton(onClick = {
-                    if (stock > 0) {
-                        medicines[medicines.size].histories.toMutableList().add(
-                            History(
-                                medicine.name,
-                                "efeza56f1e65f",
-                                Date().toString(),
-                                "Updated medicine details"
-                            )
-                        )
-                        stock--
-                    }
+                    viewModel.updateStock(medicine.name, -1)
                 }) {
                     Icon(
                         imageVector = Icons.Filled.KeyboardArrowDown,
@@ -104,22 +89,14 @@ fun MedicineDetailScreen(name: String, viewModel: MedicineViewModel) {
                     )
                 }
                 TextField(
-                    value = stock.toString(),
+                    value = medicine.stock.toString(),
                     onValueChange = {},
                     label = { Text("Stock") },
                     enabled = false,
                     modifier = Modifier.weight(1f)
                 )
                 IconButton(onClick = {
-                    medicines[medicines.size].histories.toMutableList().add(
-                        History(
-                            medicine.name,
-                            "efeza56f1e65f",
-                            Date().toString(),
-                            "Updated medicine details"
-                        )
-                    )
-                    stock++
+                    viewModel.updateStock(medicine.name, 1)
                 }) {
                     Icon(
                         imageVector = Icons.Default.KeyboardArrowUp,
