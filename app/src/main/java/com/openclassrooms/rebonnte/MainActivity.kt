@@ -220,6 +220,10 @@ private fun MainFloatingActionButton(
             "medicine" -> context.startActivity(
                 Intent(context, MedicineDetailActivity::class.java)
                     .putExtra("isNewMedicine", true)
+                    .putStringArrayListExtra(
+                        "aisleNames",
+                        ArrayList(aisleViewModel.aisles.value.map { it.name })
+                    )
             )
             "aisle" -> aisleViewModel.addRandomAisle()
         }

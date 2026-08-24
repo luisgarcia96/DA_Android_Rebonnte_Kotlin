@@ -5,6 +5,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -19,9 +20,12 @@ import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
@@ -45,11 +49,12 @@ class MedicineDetailActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val name = intent.getStringExtra("nameMedicine") ?: "Unknown"
         val isNewMedicine = intent.getBooleanExtra("isNewMedicine", false)
+        val aisleNames = intent.getStringArrayListExtra("aisleNames") ?: arrayListOf()
 
         setContent {
             RebonnteTheme {
                 if (isNewMedicine) {
-                    NewMedicineScreen(viewModel, onSaved = ::finish)
+                    NewMedicineScreen(aisleNames, viewModel, onSaved = ::finish)
                 } else {
                     MedicineDetailScreen(name, viewModel)
                 }
@@ -59,10 +64,15 @@ class MedicineDetailActivity : ComponentActivity() {
 }
 
 @Composable
-fun NewMedicineScreen(viewModel: MedicineViewModel, onSaved: () -> Unit) {
+fun NewMedicineScreen(
+    aisleNames: List<String>,
+    viewModel: MedicineViewModel,
+    onSaved: () -> Unit
+) {
     var name by rememberSaveable { mutableStateOf("") }
-    var aisle by rememberSaveable { mutableStateOf("") }
+    var selectedAisle by rememberSaveable { mutableStateOf(aisleNames.firstOrNull().orEmpty()) }
     var stock by rememberSaveable { mutableStateOf("0") }
+    var isAisleMenuExpanded by rememberSaveable { mutableStateOf(false) }
 
     Scaffold { paddingValues ->
         Column(
@@ -79,12 +89,29 @@ fun NewMedicineScreen(viewModel: MedicineViewModel, onSaved: () -> Unit) {
                 modifier = Modifier.fillMaxWidth()
             )
             Spacer(modifier = Modifier.height(8.dp))
-            TextField(
-                value = aisle,
-                onValueChange = { aisle = it },
-                label = { Text("Aisle") },
-                modifier = Modifier.fillMaxWidth()
-            )
+            Box {
+                OutlinedButton(
+                    onClick = { isAisleMenuExpanded = true },
+                    enabled = aisleNames.isNotEmpty(),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(text = selectedAisle.ifEmpty { "Select an aisle" })
+                }
+                DropdownMenu(
+                    expanded = isAisleMenuExpanded,
+                    onDismissRequest = { isAisleMenuExpanded = false }
+                ) {
+                    aisleNames.forEach { aisleName ->
+                        DropdownMenuItem(
+                            text = { Text(aisleName) },
+                            onClick = {
+                                selectedAisle = aisleName
+                                isAisleMenuExpanded = false
+                            }
+                        )
+                    }
+                }
+            }
             Spacer(modifier = Modifier.height(8.dp))
             TextField(
                 value = stock,
@@ -99,7 +126,7 @@ fun NewMedicineScreen(viewModel: MedicineViewModel, onSaved: () -> Unit) {
                         Medicine(
                             name = name,
                             stock = stock.toIntOrNull() ?: 0,
-                            nameAisle = aisle,
+                            nameAisle = selectedAisle,
                             histories = emptyList()
                         )
                     )
