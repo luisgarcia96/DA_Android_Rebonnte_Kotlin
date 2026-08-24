@@ -23,7 +23,6 @@ import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Search
@@ -81,99 +80,10 @@ fun MyApp() {
 
     RebonnteTheme {
         Scaffold(
-            topBar = {
-                var isSearchActive by rememberSaveable { mutableStateOf(false) }
-                var searchQuery by remember { mutableStateOf("") }
-
-                Column(verticalArrangement = Arrangement.spacedBy((-1).dp)) {
-                    TopAppBar(
-                        title = { if (route == "aisle") Text(text = "Aisle") else Text(text = "Medicines") },
-                        actions = {
-                            var expanded by remember { mutableStateOf(false) }
-                            if (currentRoute(navController) == "medicine") {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier
-                                        .padding(end = 8.dp)
-                                        .background(MaterialTheme.colorScheme.surface)
-                                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                                ) {
-                                    Box {
-                                        IconButton(onClick = { expanded = true }) {
-                                            Icon(Icons.Default.MoreVert, contentDescription = null)
-                                        }
-                                        DropdownMenu(
-                                            expanded = expanded,
-                                            onDismissRequest = { expanded = false },
-                                            offset = DpOffset(x = 0.dp, y = 0.dp)
-                                        ) {
-                                            DropdownMenuItem(
-                                                onClick = {
-                                                    medicineViewModel.sortByNone()
-                                                    expanded = false
-                                                },
-                                                text = { Text("Sort by None") }
-                                            )
-                                            DropdownMenuItem(
-                                                onClick = {
-                                                    medicineViewModel.sortByName()
-                                                    expanded = false
-                                                },
-                                                text = { Text("Sort by Name") }
-                                            )
-                                            DropdownMenuItem(
-                                                onClick = {
-                                                    medicineViewModel.sortByStock()
-                                                    expanded = false
-                                                },
-                                                text = { Text("Sort by Stock") }
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    )
-                    if (currentRoute(navController) == "medicine") {
-                        EmbeddedSearchBar(
-                            query = searchQuery,
-                            onQueryChange = {
-                                medicineViewModel.filterByName(it)
-                                searchQuery = it
-                            },
-                            isSearchActive = isSearchActive,
-                            onActiveChanged = { isSearchActive = it }
-                        )
-                    }
-                }
-
-            },
-            bottomBar = {
-                NavigationBar {
-                    NavigationBarItem(
-                        icon = { Icon(Icons.Default.Home, contentDescription = null) },
-                        label = { Text("Aisle") },
-                        selected = currentRoute(navController) == "aisle",
-                        onClick = { navController.navigate("aisle") }
-                    )
-                    NavigationBarItem(
-                        icon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = null) },
-                        label = { Text("Medicine") },
-                        selected = currentRoute(navController) == "medicine",
-                        onClick = { navController.navigate("medicine") }
-                    )
-                }
-            },
+            topBar = { MainTopBar(route, medicineViewModel) },
+            bottomBar = { MainBottomBar(route, navController) },
             floatingActionButton = {
-                FloatingActionButton(onClick = {
-                    if (route == "medicine") {
-                        medicineViewModel.addRandomMedicine(aisleViewModel.aisles.value)
-                    } else if (route == "aisle") {
-                        aisleViewModel.addRandomAisle()
-                    }
-                }) {
-                    Icon(Icons.Default.Add, contentDescription = "Add")
-                }
+                MainFloatingActionButton(route, medicineViewModel, aisleViewModel)
             }
         ) {
             NavHost(
@@ -185,6 +95,114 @@ fun MyApp() {
                 composable("medicine") { MedicineScreen(medicineViewModel) }
             }
         }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MainTopBar(
+    route: String?,
+    medicineViewModel: MedicineViewModel
+) {
+    var isSearchActive by rememberSaveable { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
+    var isSortMenuExpanded by remember { mutableStateOf(false) }
+
+    Column(verticalArrangement = Arrangement.spacedBy((-1).dp)) {
+        TopAppBar(
+            title = {
+                Text(text = if (route == "aisle") "Aisle" else "Medicines")
+            },
+            actions = {
+                if (route == "medicine") {
+                    Box(
+                        modifier = Modifier
+                            .padding(end = 8.dp)
+                            .background(MaterialTheme.colorScheme.surface)
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        IconButton(onClick = { isSortMenuExpanded = true }) {
+                            Icon(Icons.Default.MoreVert, contentDescription = null)
+                        }
+                        DropdownMenu(
+                            expanded = isSortMenuExpanded,
+                            onDismissRequest = { isSortMenuExpanded = false },
+                            offset = DpOffset(x = 0.dp, y = 0.dp)
+                        ) {
+                            DropdownMenuItem(
+                                onClick = {
+                                    medicineViewModel.sortByNone()
+                                    isSortMenuExpanded = false
+                                },
+                                text = { Text("Sort by None") }
+                            )
+                            DropdownMenuItem(
+                                onClick = {
+                                    medicineViewModel.sortByName()
+                                    isSortMenuExpanded = false
+                                },
+                                text = { Text("Sort by Name") }
+                            )
+                            DropdownMenuItem(
+                                onClick = {
+                                    medicineViewModel.sortByStock()
+                                    isSortMenuExpanded = false
+                                },
+                                text = { Text("Sort by Stock") }
+                            )
+                        }
+                    }
+                }
+            }
+        )
+        if (route == "medicine") {
+            EmbeddedSearchBar(
+                query = searchQuery,
+                onQueryChange = {
+                    medicineViewModel.filterByName(it)
+                    searchQuery = it
+                },
+                isSearchActive = isSearchActive,
+                onActiveChanged = { isSearchActive = it }
+            )
+        }
+    }
+}
+
+@Composable
+private fun MainBottomBar(
+    route: String?,
+    navController: NavController
+) {
+    NavigationBar {
+        NavigationBarItem(
+            icon = { Icon(Icons.Default.Home, contentDescription = null) },
+            label = { Text("Aisle") },
+            selected = route == "aisle",
+            onClick = { navController.navigate("aisle") }
+        )
+        NavigationBarItem(
+            icon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = null) },
+            label = { Text("Medicine") },
+            selected = route == "medicine",
+            onClick = { navController.navigate("medicine") }
+        )
+    }
+}
+
+@Composable
+private fun MainFloatingActionButton(
+    route: String?,
+    medicineViewModel: MedicineViewModel,
+    aisleViewModel: AisleViewModel
+) {
+    FloatingActionButton(onClick = {
+        when (route) {
+            "medicine" -> medicineViewModel.addRandomMedicine(aisleViewModel.aisles.value)
+            "aisle" -> aisleViewModel.addRandomAisle()
+        }
+    }) {
+        Icon(Icons.Default.Add, contentDescription = "Add")
     }
 }
 
