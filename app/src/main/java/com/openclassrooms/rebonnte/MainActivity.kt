@@ -58,6 +58,8 @@ import com.openclassrooms.rebonnte.ui.medicine.MedicineScreen
 import com.openclassrooms.rebonnte.ui.medicine.MedicineDetailActivity
 import com.openclassrooms.rebonnte.ui.medicine.MedicineViewModel
 import com.openclassrooms.rebonnte.ui.theme.RebonnteTheme
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.filterNotNull
 
 class MainActivity : ComponentActivity() {
     private val medicineViewModel: MedicineViewModel by viewModels()
@@ -85,14 +87,15 @@ fun MyApp(
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val route = navBackStackEntry?.destination?.route
-    val errorMessage by medicineViewModel.errorMessage.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    LaunchedEffect(errorMessage) {
-        errorMessage?.let { message ->
-            snackbarHostState.showSnackbar(message)
-            medicineViewModel.clearError()
-        }
+    LaunchedEffect(medicineViewModel) {
+        medicineViewModel.errorMessage
+            .filterNotNull()
+            .collectLatest { message ->
+                snackbarHostState.showSnackbar(message)
+                medicineViewModel.clearError()
+            }
     }
 
     RebonnteTheme {
