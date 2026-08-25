@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -29,6 +30,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -58,7 +60,7 @@ class MedicineDetailActivity : ComponentActivity() {
                 if (isNewMedicine) {
                     NewMedicineScreen(aisleNames, viewModel, onSaved = ::finish)
                 } else {
-                    MedicineDetailScreen(name, aisleNames, viewModel)
+                    MedicineDetailScreen(name, aisleNames, viewModel, onDeleted = ::finish)
                 }
             }
         }
@@ -146,7 +148,8 @@ fun NewMedicineScreen(
 fun MedicineDetailScreen(
     name: String,
     aisleNames: List<String>,
-    viewModel: MedicineViewModel
+    viewModel: MedicineViewModel,
+    onDeleted: () -> Unit
 ) {
     val medicines by viewModel.medicines.collectAsState(initial = emptyList())
     var currentMedicineName by rememberSaveable { mutableStateOf(name) }
@@ -156,6 +159,7 @@ fun MedicineDetailScreen(
     var editedAisle by rememberSaveable { mutableStateOf(medicine.nameAisle) }
     var editedStock by rememberSaveable { mutableStateOf(medicine.stock.toString()) }
     var isAisleMenuExpanded by rememberSaveable { mutableStateOf(false) }
+    var isDeleteDialogVisible by rememberSaveable { mutableStateOf(false) }
 
     Scaffold { paddingValues ->
         Column(
@@ -265,6 +269,32 @@ fun MedicineDetailScreen(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(if (isEditing) "Save" else "Edit")
+            }
+            TextButton(
+                onClick = { isDeleteDialogVisible = true },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Delete")
+            }
+            if (isDeleteDialogVisible) {
+                AlertDialog(
+                    onDismissRequest = { isDeleteDialogVisible = false },
+                    title = { Text("Delete medicine") },
+                    text = { Text("Are you sure you want to delete ${medicine.name}?") },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            viewModel.deleteMedicine(medicine.name)
+                            onDeleted()
+                        }) {
+                            Text("Delete")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { isDeleteDialogVisible = false }) {
+                            Text("Cancel")
+                        }
+                    }
+                )
             }
             Spacer(modifier = Modifier.height(16.dp))
             Text(text = "History", style = MaterialTheme.typography.titleLarge)

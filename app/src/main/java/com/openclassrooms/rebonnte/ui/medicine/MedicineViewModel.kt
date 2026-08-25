@@ -61,6 +61,16 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
         persistMedicines()
     }
 
+    fun deleteMedicine(medicineName: String) {
+        val updatedMedicines = allMedicines.filterNot { it.name == medicineName }
+
+        if (updatedMedicines.size == allMedicines.size) return
+
+        allMedicines = updatedMedicines
+        _medicines.value = allMedicines
+        persistMedicines()
+    }
+
     fun clearError() {
         _errorMessage.value = null
     }
