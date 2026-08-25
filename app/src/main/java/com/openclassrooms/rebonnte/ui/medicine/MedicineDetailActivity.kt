@@ -45,6 +45,17 @@ import com.openclassrooms.rebonnte.ui.history.History
 import com.openclassrooms.rebonnte.ui.aisle.AisleViewModel
 import com.openclassrooms.rebonnte.ui.theme.RebonnteTheme
 
+private fun validateMedicineFields(name: String, aisle: String, stock: String): String? {
+    if (name.isBlank()) return "Le nom du médicament est obligatoire."
+    if (aisle.isBlank()) return "Sélectionnez un rayon."
+
+    val stockValue = stock.toIntOrNull()
+        ?: return "Le stock doit être un nombre entier."
+    if (stockValue < 0) return "Le stock ne peut pas être négatif."
+
+    return null
+}
+
 class MedicineDetailActivity : ComponentActivity() {
     private val viewModel: MedicineViewModel by viewModels()
     private val aisleViewModel: AisleViewModel by viewModels()
@@ -77,6 +88,7 @@ fun NewMedicineScreen(
     var selectedAisle by rememberSaveable { mutableStateOf(aisleNames.firstOrNull().orEmpty()) }
     var stock by rememberSaveable { mutableStateOf("0") }
     var isAisleMenuExpanded by rememberSaveable { mutableStateOf(false) }
+    var validationError by rememberSaveable { mutableStateOf<String?>(null) }
 
     Scaffold { paddingValues ->
         Column(
@@ -88,7 +100,10 @@ fun NewMedicineScreen(
             Spacer(modifier = Modifier.height(16.dp))
             TextField(
                 value = name,
-                onValueChange = { name = it },
+                onValueChange = {
+                    name = it
+                    validationError = null
+                },
                 label = { Text("Name") },
                 modifier = Modifier.fillMaxWidth()
             )
@@ -111,6 +126,7 @@ fun NewMedicineScreen(
                             onClick = {
                                 selectedAisle = aisleName
                                 isAisleMenuExpanded = false
+                                validationError = null
                             }
                         )
                     }
@@ -119,26 +135,35 @@ fun NewMedicineScreen(
             Spacer(modifier = Modifier.height(8.dp))
             TextField(
                 value = stock,
-                onValueChange = { stock = it },
+                onValueChange = {
+                    stock = it
+                    validationError = null
+                },
                 label = { Text("Stock") },
                 modifier = Modifier.fillMaxWidth()
             )
             Spacer(modifier = Modifier.height(16.dp))
             Button(
                 onClick = {
-                    viewModel.addMedicine(
-                        Medicine(
-                            name = name,
-                            stock = stock.toIntOrNull() ?: 0,
-                            nameAisle = selectedAisle,
-                            histories = emptyList()
+                    validationError = validateMedicineFields(name, selectedAisle, stock)
+                    if (validationError == null) {
+                        viewModel.addMedicine(
+                            Medicine(
+                                name = name.trim(),
+                                stock = stock.toInt(),
+                                nameAisle = selectedAisle,
+                                histories = emptyList()
+                            )
                         )
-                    )
-                    onSaved()
+                        onSaved()
+                    }
                 },
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text("Save")
+            }
+            validationError?.let { message ->
+                Text(text = message, color = MaterialTheme.colorScheme.error)
             }
         }
     }
@@ -160,6 +185,7 @@ fun MedicineDetailScreen(
     var editedStock by rememberSaveable { mutableStateOf(medicine.stock.toString()) }
     var isAisleMenuExpanded by rememberSaveable { mutableStateOf(false) }
     var isDeleteDialogVisible by rememberSaveable { mutableStateOf(false) }
+    var validationError by rememberSaveable { mutableStateOf<String?>(null) }
 
     Scaffold { paddingValues ->
         Column(
@@ -169,7 +195,10 @@ fun MedicineDetailScreen(
         ) {
             TextField(
                 value = if (isEditing) editedName else medicine.name,
-                onValueChange = { editedName = it },
+                onValueChange = {
+                    editedName = it
+                    validationError = null
+                },
                 label = { Text("Name") },
                 enabled = isEditing,
                 modifier = Modifier.fillMaxWidth()
@@ -194,6 +223,7 @@ fun MedicineDetailScreen(
                                 onClick = {
                                     editedAisle = aisleName
                                     isAisleMenuExpanded = false
+                                    validationError = null
                                 }
                             )
                         }
@@ -212,7 +242,10 @@ fun MedicineDetailScreen(
             if (isEditing) {
                 TextField(
                     value = editedStock,
-                    onValueChange = { editedStock = it },
+                    onValueChange = {
+                        editedStock = it
+                        validationError = null
+                    },
                     label = { Text("Stock") },
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -250,25 +283,37 @@ fun MedicineDetailScreen(
             Button(
                 onClick = {
                     if (isEditing) {
-                        viewModel.updateMedicine(
-                            medicine.name,
-                            medicine.copy(
-                                name = editedName,
-                                nameAisle = editedAisle,
-                                stock = editedStock.toIntOrNull() ?: medicine.stock
-                            )
+                        validationError = validateMedicineFields(
+                            editedName,
+                            editedAisle,
+                            editedStock
                         )
-                        currentMedicineName = editedName
+                        if (validationError == null) {
+                            viewModel.updateMedicine(
+                                medicine.name,
+                                medicine.copy(
+                                    name = editedName.trim(),
+                                    nameAisle = editedAisle,
+                                    stock = editedStock.toInt()
+                                )
+                            )
+                            currentMedicineName = editedName.trim()
+                            isEditing = false
+                        }
                     } else {
                         editedName = medicine.name
                         editedAisle = medicine.nameAisle
                         editedStock = medicine.stock.toString()
+                        validationError = null
+                        isEditing = true
                     }
-                    isEditing = !isEditing
                 },
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(if (isEditing) "Save" else "Edit")
+            }
+            validationError?.let { message ->
+                Text(text = message, color = MaterialTheme.colorScheme.error)
             }
             TextButton(
                 onClick = { isDeleteDialogVisible = true },
