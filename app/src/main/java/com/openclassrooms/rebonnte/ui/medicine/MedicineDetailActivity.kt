@@ -5,7 +5,6 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -22,12 +21,9 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
@@ -45,6 +41,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.openclassrooms.rebonnte.ui.history.History
 import com.openclassrooms.rebonnte.ui.aisle.AisleViewModel
+import com.openclassrooms.rebonnte.ui.components.AisleSelector
 import com.openclassrooms.rebonnte.ui.theme.RebonnteTheme
 import kotlinx.coroutines.launch
 
@@ -90,7 +87,6 @@ fun NewMedicineScreen(
     var name by rememberSaveable { mutableStateOf("") }
     var selectedAisle by rememberSaveable { mutableStateOf(aisleNames.firstOrNull().orEmpty()) }
     var stock by rememberSaveable { mutableStateOf("0") }
-    var isAisleMenuExpanded by rememberSaveable { mutableStateOf(false) }
     var validationError by rememberSaveable { mutableStateOf<String?>(null) }
     var isSaving by rememberSaveable { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
@@ -113,30 +109,14 @@ fun NewMedicineScreen(
                 modifier = Modifier.fillMaxWidth()
             )
             Spacer(modifier = Modifier.height(8.dp))
-            Box {
-                OutlinedButton(
-                    onClick = { isAisleMenuExpanded = true },
-                    enabled = aisleNames.isNotEmpty(),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(text = selectedAisle.ifEmpty { "Select an aisle" })
+            AisleSelector(
+                aisleNames = aisleNames,
+                selectedAisle = selectedAisle,
+                onAisleSelected = { aisleName ->
+                    selectedAisle = aisleName
+                    validationError = null
                 }
-                DropdownMenu(
-                    expanded = isAisleMenuExpanded,
-                    onDismissRequest = { isAisleMenuExpanded = false }
-                ) {
-                    aisleNames.forEach { aisleName ->
-                        DropdownMenuItem(
-                            text = { Text(aisleName) },
-                            onClick = {
-                                selectedAisle = aisleName
-                                isAisleMenuExpanded = false
-                                validationError = null
-                            }
-                        )
-                    }
-                }
-            }
+            )
             Spacer(modifier = Modifier.height(8.dp))
             TextField(
                 value = stock,
@@ -192,7 +172,6 @@ fun MedicineDetailScreen(
     var editedName by rememberSaveable { mutableStateOf(medicine.name) }
     var editedAisle by rememberSaveable { mutableStateOf(medicine.nameAisle) }
     var editedStock by rememberSaveable { mutableStateOf(medicine.stock.toString()) }
-    var isAisleMenuExpanded by rememberSaveable { mutableStateOf(false) }
     var isDeleteDialogVisible by rememberSaveable { mutableStateOf(false) }
     var validationError by rememberSaveable { mutableStateOf<String?>(null) }
     var isSaving by rememberSaveable { mutableStateOf(false) }
@@ -216,30 +195,14 @@ fun MedicineDetailScreen(
             )
             Spacer(modifier = Modifier.height(8.dp))
             if (isEditing) {
-                Box {
-                    OutlinedButton(
-                        onClick = { isAisleMenuExpanded = true },
-                        enabled = aisleNames.isNotEmpty(),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(text = editedAisle.ifEmpty { "Select an aisle" })
+                AisleSelector(
+                    aisleNames = aisleNames,
+                    selectedAisle = editedAisle,
+                    onAisleSelected = { aisleName ->
+                        editedAisle = aisleName
+                        validationError = null
                     }
-                    DropdownMenu(
-                        expanded = isAisleMenuExpanded,
-                        onDismissRequest = { isAisleMenuExpanded = false }
-                    ) {
-                        aisleNames.forEach { aisleName ->
-                            DropdownMenuItem(
-                                text = { Text(aisleName) },
-                                onClick = {
-                                    editedAisle = aisleName
-                                    isAisleMenuExpanded = false
-                                    validationError = null
-                                }
-                            )
-                        }
-                    }
-                }
+                )
             } else {
                 TextField(
                     value = medicine.nameAisle,

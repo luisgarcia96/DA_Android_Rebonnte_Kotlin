@@ -4,14 +4,10 @@ import android.content.Context
 import androidx.compose.runtime.Composable
 
 import android.content.Intent
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.KeyboardArrowRight
-import androidx.compose.material3.Icon
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -26,6 +22,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.filter
 import kotlin.math.min
 import androidx.compose.ui.platform.LocalContext
+import com.openclassrooms.rebonnte.ui.components.MedicineListItem
 
 @Composable
 fun MedicineScreen(
@@ -92,7 +89,7 @@ fun MedicineScreen(
             state = listState
         ) {
             items(medicines.take(visibleCount)) { medicine ->
-                MedicineItem(medicine = medicine, onClick = {
+                MedicineListItem(medicine = medicine, onClick = {
                     startDetailActivity(context, medicine.name)
                 })
             }
@@ -113,23 +110,6 @@ fun MedicineScreen(
 }
 
 private const val PAGE_SIZE = 20
-
-@Composable
-fun MedicineItem(medicine: Medicine, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onClick() }
-            .padding(16.dp),
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Column {
-            Text(text = medicine.name, style = MaterialTheme.typography.bodyLarge)
-            Text(text = "Stock: ${medicine.stock}", style = MaterialTheme.typography.bodyMedium)
-        }
-        Icon(imageVector = Icons.Default.KeyboardArrowRight, contentDescription = "Arrow")
-    }
-}
 
 private fun startDetailActivity(context: Context, name: String) {
     val intent = Intent(context, MedicineDetailActivity::class.java).apply {

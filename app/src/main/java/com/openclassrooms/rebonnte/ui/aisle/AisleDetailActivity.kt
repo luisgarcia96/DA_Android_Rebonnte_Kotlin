@@ -5,30 +5,17 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import com.openclassrooms.rebonnte.ui.medicine.Medicine
+import com.openclassrooms.rebonnte.ui.components.MedicineListItem
 import com.openclassrooms.rebonnte.ui.medicine.MedicineDetailActivity
 import com.openclassrooms.rebonnte.ui.medicine.MedicineViewModel
 import com.openclassrooms.rebonnte.ui.theme.RebonnteTheme
@@ -65,30 +52,13 @@ fun AisleDetailScreen(name: String, viewModel: MedicineViewModel) {
             modifier = Modifier.fillMaxSize()
         ) {
             items(filteredMedicines) { medicine ->
-                MedicineItem(medicine = medicine, onClick = { name ->
+                MedicineListItem(medicine = medicine, onClick = {
                     val intent = Intent(context, MedicineDetailActivity::class.java).apply {
-                        putExtra("nameMedicine", name)
+                        putExtra("nameMedicine", medicine.name)
                     }
                     context.startActivity(intent)
                 })
             }
         }
-    }
-}
-
-@Composable
-fun MedicineItem(medicine: Medicine, onClick: (String) -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onClick(medicine.name) }
-            .padding(16.dp),
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Column {
-            Text(text = medicine.name, fontWeight = FontWeight.Bold)
-            Text(text = "Stock: ${medicine.stock}", color = Color.Gray)
-        }
-        Icon(imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Arrow")
     }
 }
