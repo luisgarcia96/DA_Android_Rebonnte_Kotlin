@@ -113,7 +113,21 @@ fun MyApp(
                 startDestination = "aisle"
             ) {
                 composable("aisle") { AisleScreen(aisleViewModel) }
-                composable("medicine") { MedicineScreen(medicineViewModel) }
+                composable("medicine") {
+                    MedicineScreen(
+                        medicineViewModel,
+                        onAddTestData = {
+                            repeat(5) { aisleViewModel.addRandomAisle() }
+                            medicineViewModel.addTestMedicines(
+                                aisleViewModel.aisles.value.map { it.name }
+                            )
+                        },
+                        onClearAllData = {
+                            medicineViewModel.clearAllMedicines()
+                            aisleViewModel.clearAllAisles()
+                        }
+                    )
+                }
             }
         }
     }

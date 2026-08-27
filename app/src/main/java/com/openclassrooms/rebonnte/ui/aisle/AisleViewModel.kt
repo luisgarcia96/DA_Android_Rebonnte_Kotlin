@@ -21,6 +21,11 @@ class AisleViewModel(application: Application) : AndroidViewModel(application) {
         persistAisles()
     }
 
+    fun clearAllAisles() {
+        _aisles.value = defaultAisles()
+        persistAisles()
+    }
+
     private fun loadAisles(): List<Aisle> {
         val storedAisles = preferences.getString(AISLES_KEY, null) ?: return defaultAisles()
         return runCatching {

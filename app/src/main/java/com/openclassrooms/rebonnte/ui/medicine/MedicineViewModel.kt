@@ -49,6 +49,33 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
         persistMedicines()
     }
 
+    fun addTestMedicines(aisleNames: List<String>) {
+        if (aisleNames.isEmpty()) {
+            showError("Ajoutez un rayon avant de créer les données de test.")
+            return
+        }
+
+        val firstTestMedicineNumber = allMedicines.size + 1
+        val testMedicines = List(TEST_MEDICINE_COUNT) { index ->
+            val number = firstTestMedicineNumber + index
+            Medicine(
+                name = "Test Medicine $number",
+                stock = number % 100,
+                nameAisle = aisleNames[index % aisleNames.size],
+                histories = emptyList()
+            )
+        }
+        allMedicines = allMedicines + testMedicines
+        _medicines.value = allMedicines
+        persistMedicines()
+    }
+
+    fun clearAllMedicines() {
+        allMedicines = emptyList()
+        _medicines.value = emptyList()
+        persistMedicines()
+    }
+
     fun updateMedicine(originalName: String, updatedMedicine: Medicine) {
         val updatedMedicines = allMedicines.toMutableList()
         val medicineIndex = updatedMedicines.indexOfFirst { it.name == originalName }
@@ -203,5 +230,6 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
         const val MEDICINES_KEY = "medicines"
         const val HISTORIES_KEY = "histories"
         const val LOCAL_USER_ID = "local-user"
+        const val TEST_MEDICINE_COUNT = 25
     }
 }
