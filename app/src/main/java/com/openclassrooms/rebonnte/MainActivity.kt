@@ -45,6 +45,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
@@ -157,7 +159,10 @@ private fun MainTopBar(
                             .padding(horizontal = 8.dp, vertical = 4.dp)
                     ) {
                         IconButton(onClick = { isSortMenuExpanded = true }) {
-                            Icon(Icons.Default.MoreVert, contentDescription = null)
+                            Icon(
+                                imageVector = Icons.Default.MoreVert,
+                                contentDescription = "Sort medicines"
+                            )
                         }
                         DropdownMenu(
                             expanded = isSortMenuExpanded,
@@ -232,6 +237,8 @@ private fun MainFloatingActionButton(
 ) {
     val context = LocalContext.current
 
+    val contentDescription = if (route == "medicine") "Add medicine" else "Add aisle"
+
     FloatingActionButton(onClick = {
         when (route) {
             "medicine" -> context.startActivity(
@@ -245,7 +252,7 @@ private fun MainFloatingActionButton(
             "aisle" -> aisleViewModel.addRandomAisle()
         }
     }) {
-        Icon(Icons.Default.Add, contentDescription = "Add")
+        Icon(imageVector = Icons.Default.Add, contentDescription = contentDescription)
     }
 }
 
@@ -286,7 +293,7 @@ fun EmbeddedSearchBar(
             IconButton(onClick = { activeChanged(false) }) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
-                    contentDescription = null,
+                    contentDescription = "Close search",
                     tint = MaterialTheme.colorScheme.primary
                 )
             }
@@ -306,7 +313,8 @@ fun EmbeddedSearchBar(
             },
             modifier = Modifier
                 .weight(1f)
-                .padding(horizontal = 8.dp),
+                .padding(horizontal = 8.dp)
+                .semantics { contentDescription = "Search medicines" },
             singleLine = true,
             decorationBox = { innerTextField ->
                 if (searchQuery.isEmpty()) {
@@ -327,7 +335,7 @@ fun EmbeddedSearchBar(
             }) {
                 Icon(
                     imageVector = Icons.Rounded.Close,
-                    contentDescription = null,
+                    contentDescription = "Clear search",
                     tint = MaterialTheme.colorScheme.primary
                 )
             }

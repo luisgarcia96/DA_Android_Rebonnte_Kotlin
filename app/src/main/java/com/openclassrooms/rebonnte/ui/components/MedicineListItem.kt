@@ -13,6 +13,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.openclassrooms.rebonnte.ui.medicine.Medicine
 
@@ -21,6 +25,10 @@ fun MedicineListItem(medicine: Medicine, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .semantics(mergeDescendants = true) {
+                contentDescription = "${medicine.name}, stock ${medicine.stock}"
+                role = Role.Button
+            }
             .clickable(onClick = onClick)
             .padding(16.dp),
         horizontalArrangement = Arrangement.SpaceBetween
@@ -31,7 +39,7 @@ fun MedicineListItem(medicine: Medicine, onClick: () -> Unit) {
         }
         Icon(
             imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-            contentDescription = "Open medicine"
+            contentDescription = null
         )
     }
 }

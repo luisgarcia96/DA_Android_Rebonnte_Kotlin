@@ -233,7 +233,7 @@ fun MedicineDetailScreen(
                     }) {
                         Icon(
                             imageVector = Icons.Filled.KeyboardArrowDown,
-                            contentDescription = "Minus One"
+                            contentDescription = "Decrease stock by one"
                         )
                     }
                     TextField(
@@ -248,7 +248,7 @@ fun MedicineDetailScreen(
                     }) {
                         Icon(
                             imageVector = Icons.Default.KeyboardArrowUp,
-                            contentDescription = "Plus One"
+                            contentDescription = "Increase stock by one"
                         )
                     }
                 }
