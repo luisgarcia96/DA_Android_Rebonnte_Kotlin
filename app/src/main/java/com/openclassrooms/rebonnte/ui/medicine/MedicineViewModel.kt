@@ -8,6 +8,8 @@ import com.openclassrooms.rebonnte.ui.history.History
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Date
@@ -43,10 +45,10 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
         persistMedicines()
     }
 
-    fun addMedicine(medicine: Medicine) {
+    suspend fun addMedicine(medicine: Medicine) {
         allMedicines = allMedicines + medicine
         _medicines.value = allMedicines
-        persistMedicines()
+        persistMedicinesAsync(allMedicines)
     }
 
     fun addTestMedicines(aisleNames: List<String>) {
@@ -76,7 +78,7 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
         persistMedicines()
     }
 
-    fun updateMedicine(originalName: String, updatedMedicine: Medicine) {
+    suspend fun updateMedicine(originalName: String, updatedMedicine: Medicine) {
         val updatedMedicines = allMedicines.toMutableList()
         val medicineIndex = updatedMedicines.indexOfFirst { it.name == originalName }
 
@@ -85,17 +87,17 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
         updatedMedicines[medicineIndex] = updatedMedicine
         allMedicines = updatedMedicines
         _medicines.value = allMedicines
-        persistMedicines()
+        persistMedicinesAsync(allMedicines)
     }
 
-    fun deleteMedicine(medicineName: String) {
+    suspend fun deleteMedicine(medicineName: String) {
         val updatedMedicines = allMedicines.filterNot { it.name == medicineName }
 
         if (updatedMedicines.size == allMedicines.size) return
 
         allMedicines = updatedMedicines
         _medicines.value = allMedicines
-        persistMedicines()
+        persistMedicinesAsync(allMedicines)
     }
 
     fun clearError() {
@@ -190,9 +192,15 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    private fun persistMedicines() {
+    private suspend fun persistMedicinesAsync(medicines: List<Medicine>) {
+        withContext(Dispatchers.IO) {
+            persistMedicines(medicines)
+        }
+    }
+
+    private fun persistMedicines(medicines: List<Medicine> = allMedicines) {
         val medicinesArray = JSONArray()
-        allMedicines.forEach { medicine ->
+        medicines.forEach { medicine ->
             val medicineObject = JSONObject()
                 .put("name", medicine.name)
                 .put("stock", medicine.stock)

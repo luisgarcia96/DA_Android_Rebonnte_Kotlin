@@ -21,6 +21,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -35,6 +36,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -44,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import com.openclassrooms.rebonnte.ui.history.History
 import com.openclassrooms.rebonnte.ui.aisle.AisleViewModel
 import com.openclassrooms.rebonnte.ui.theme.RebonnteTheme
+import kotlinx.coroutines.launch
 
 private fun validateMedicineFields(name: String, aisle: String, stock: String): String? {
     if (name.isBlank()) return "Le nom du médicament est obligatoire."
@@ -89,6 +92,8 @@ fun NewMedicineScreen(
     var stock by rememberSaveable { mutableStateOf("0") }
     var isAisleMenuExpanded by rememberSaveable { mutableStateOf(false) }
     var validationError by rememberSaveable { mutableStateOf<String?>(null) }
+    var isSaving by rememberSaveable { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
 
     Scaffold { paddingValues ->
         Column(
@@ -147,20 +152,24 @@ fun NewMedicineScreen(
                 onClick = {
                     validationError = validateMedicineFields(name, selectedAisle, stock)
                     if (validationError == null) {
-                        viewModel.addMedicine(
-                            Medicine(
-                                name = name.trim(),
-                                stock = stock.toInt(),
-                                nameAisle = selectedAisle,
-                                histories = emptyList()
+                        isSaving = true
+                        coroutineScope.launch {
+                            viewModel.addMedicine(
+                                Medicine(
+                                    name = name.trim(),
+                                    stock = stock.toInt(),
+                                    nameAisle = selectedAisle,
+                                    histories = emptyList()
+                                )
                             )
-                        )
-                        onSaved()
+                            onSaved()
+                        }
                     }
                 },
+                enabled = !isSaving,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Save")
+                LoadingButtonContent(label = "Save", isLoading = isSaving)
             }
             validationError?.let { message ->
                 Text(text = message, color = MaterialTheme.colorScheme.error)
@@ -186,6 +195,8 @@ fun MedicineDetailScreen(
     var isAisleMenuExpanded by rememberSaveable { mutableStateOf(false) }
     var isDeleteDialogVisible by rememberSaveable { mutableStateOf(false) }
     var validationError by rememberSaveable { mutableStateOf<String?>(null) }
+    var isSaving by rememberSaveable { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
 
     Scaffold { paddingValues ->
         Column(
@@ -289,16 +300,20 @@ fun MedicineDetailScreen(
                             editedStock
                         )
                         if (validationError == null) {
-                            viewModel.updateMedicine(
-                                medicine.name,
-                                medicine.copy(
-                                    name = editedName.trim(),
-                                    nameAisle = editedAisle,
-                                    stock = editedStock.toInt()
+                            isSaving = true
+                            coroutineScope.launch {
+                                viewModel.updateMedicine(
+                                    medicine.name,
+                                    medicine.copy(
+                                        name = editedName.trim(),
+                                        nameAisle = editedAisle,
+                                        stock = editedStock.toInt()
+                                    )
                                 )
-                            )
-                            currentMedicineName = editedName.trim()
-                            isEditing = false
+                                currentMedicineName = editedName.trim()
+                                isEditing = false
+                                isSaving = false
+                            }
                         }
                     } else {
                         editedName = medicine.name
@@ -308,9 +323,13 @@ fun MedicineDetailScreen(
                         isEditing = true
                     }
                 },
+                enabled = !isSaving,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text(if (isEditing) "Save" else "Edit")
+                LoadingButtonContent(
+                    label = if (isEditing) "Save" else "Edit",
+                    isLoading = isSaving
+                )
             }
             validationError?.let { message ->
                 Text(text = message, color = MaterialTheme.colorScheme.error)
@@ -323,19 +342,30 @@ fun MedicineDetailScreen(
             }
             if (isDeleteDialogVisible) {
                 AlertDialog(
-                    onDismissRequest = { isDeleteDialogVisible = false },
+                    onDismissRequest = {
+                        if (!isSaving) isDeleteDialogVisible = false
+                    },
                     title = { Text("Delete medicine") },
                     text = { Text("Are you sure you want to delete ${medicine.name}?") },
                     confirmButton = {
-                        TextButton(onClick = {
-                            viewModel.deleteMedicine(medicine.name)
-                            onDeleted()
-                        }) {
-                            Text("Delete")
+                        TextButton(
+                            onClick = {
+                                isSaving = true
+                                coroutineScope.launch {
+                                    viewModel.deleteMedicine(medicine.name)
+                                    onDeleted()
+                                }
+                            },
+                            enabled = !isSaving
+                        ) {
+                            LoadingButtonContent(label = "Delete", isLoading = isSaving)
                         }
                     },
                     dismissButton = {
-                        TextButton(onClick = { isDeleteDialogVisible = false }) {
+                        TextButton(
+                            onClick = { isDeleteDialogVisible = false },
+                            enabled = !isSaving
+                        ) {
                             Text("Cancel")
                         }
                     }
@@ -350,6 +380,18 @@ fun MedicineDetailScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun LoadingButtonContent(label: String, isLoading: Boolean) {
+    if (isLoading) {
+        CircularProgressIndicator(
+            modifier = Modifier.height(20.dp),
+            strokeWidth = 2.dp
+        )
+    } else {
+        Text(label)
     }
 }
 
