@@ -14,6 +14,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -56,6 +57,8 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.openclassrooms.rebonnte.ui.aisle.AisleScreen
 import com.openclassrooms.rebonnte.ui.aisle.AisleViewModel
+import com.openclassrooms.rebonnte.ui.auth.AuthScreen
+import com.openclassrooms.rebonnte.ui.auth.AuthViewModel
 import com.openclassrooms.rebonnte.ui.medicine.MedicineScreen
 import com.openclassrooms.rebonnte.ui.medicine.MedicineDetailActivity
 import com.openclassrooms.rebonnte.ui.medicine.MedicineViewModel
@@ -66,11 +69,12 @@ import kotlinx.coroutines.flow.filterNotNull
 class MainActivity : ComponentActivity() {
     private val medicineViewModel: MedicineViewModel by viewModels()
     private val aisleViewModel: AisleViewModel by viewModels()
+    private val authViewModel: AuthViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            MyApp(medicineViewModel, aisleViewModel)
+            MyApp(medicineViewModel, aisleViewModel, authViewModel)
         }
     }
 
@@ -84,7 +88,32 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun MyApp(
     medicineViewModel: MedicineViewModel,
-    aisleViewModel: AisleViewModel
+    aisleViewModel: AisleViewModel,
+    authViewModel: AuthViewModel
+) {
+    val authState by authViewModel.uiState.collectAsState()
+
+    RebonnteTheme {
+        if (authState.isAuthenticated) {
+            StockApp(medicineViewModel, aisleViewModel, authState.userEmail)
+        } else {
+            AuthScreen(
+                errorMessage = authState.errorMessage,
+                isSubmitting = authState.isSubmitting,
+                onSignIn = authViewModel::signIn,
+                onCreateAccount = authViewModel::createAccount,
+                onErrorShown = authViewModel::clearError
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun StockApp(
+    medicineViewModel: MedicineViewModel,
+    aisleViewModel: AisleViewModel,
+    userEmail: String?
 ) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
@@ -100,36 +129,34 @@ fun MyApp(
             }
     }
 
-    RebonnteTheme {
-        Scaffold(
-            topBar = { MainTopBar(route, medicineViewModel) },
-            bottomBar = { MainBottomBar(route, navController) },
-            snackbarHost = { SnackbarHost(snackbarHostState) },
-            floatingActionButton = {
-                MainFloatingActionButton(route, aisleViewModel)
-            }
+    Scaffold(
+        topBar = { MainTopBar(route, medicineViewModel, userEmail) },
+        bottomBar = { MainBottomBar(route, navController) },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        floatingActionButton = {
+            MainFloatingActionButton(route, aisleViewModel)
+        }
+    ) {
+        NavHost(
+            modifier = Modifier.padding(it),
+            navController = navController,
+            startDestination = "aisle"
         ) {
-            NavHost(
-                modifier = Modifier.padding(it),
-                navController = navController,
-                startDestination = "aisle"
-            ) {
-                composable("aisle") { AisleScreen(aisleViewModel) }
-                composable("medicine") {
-                    MedicineScreen(
-                        medicineViewModel,
-                        onAddTestData = {
-                            repeat(5) { aisleViewModel.addRandomAisle() }
-                            medicineViewModel.addTestMedicines(
-                                aisleViewModel.aisles.value.map { it.name }
-                            )
-                        },
-                        onClearAllData = {
-                            medicineViewModel.clearAllMedicines()
-                            aisleViewModel.clearAllAisles()
-                        }
-                    )
-                }
+            composable("aisle") { AisleScreen(aisleViewModel) }
+            composable("medicine") {
+                MedicineScreen(
+                    medicineViewModel,
+                    onAddTestData = {
+                        repeat(5) { aisleViewModel.addRandomAisle() }
+                        medicineViewModel.addTestMedicines(
+                            aisleViewModel.aisles.value.map { it.name }
+                        )
+                    },
+                    onClearAllData = {
+                        medicineViewModel.clearAllMedicines()
+                        aisleViewModel.clearAllAisles()
+                    }
+                )
             }
         }
     }
@@ -139,7 +166,8 @@ fun MyApp(
 @Composable
 private fun MainTopBar(
     route: String?,
-    medicineViewModel: MedicineViewModel
+    medicineViewModel: MedicineViewModel,
+    userEmail: String?
 ) {
     var isSearchActive by rememberSaveable { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
@@ -148,7 +176,15 @@ private fun MainTopBar(
     Column(verticalArrangement = Arrangement.spacedBy((-1).dp)) {
         TopAppBar(
             title = {
-                Text(text = if (route == "aisle") "Aisle" else "Medicines")
+                Column {
+                    Text(text = if (route == "aisle") "Aisle" else "Medicines")
+                    if (userEmail != null) {
+                        Text(
+                            text = "Connecte : $userEmail",
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    }
+                }
             },
             actions = {
                 if (route == "medicine") {
