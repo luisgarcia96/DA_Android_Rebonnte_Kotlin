@@ -25,6 +25,7 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Home
@@ -95,7 +96,12 @@ fun MyApp(
 
     RebonnteTheme {
         if (authState.isAuthenticated) {
-            StockApp(medicineViewModel, aisleViewModel, authState.userEmail)
+            StockApp(
+                medicineViewModel = medicineViewModel,
+                aisleViewModel = aisleViewModel,
+                userEmail = authState.userEmail,
+                onSignOut = authViewModel::signOut
+            )
         } else {
             AuthScreen(
                 errorMessage = authState.errorMessage,
@@ -113,7 +119,8 @@ fun MyApp(
 private fun StockApp(
     medicineViewModel: MedicineViewModel,
     aisleViewModel: AisleViewModel,
-    userEmail: String?
+    userEmail: String?,
+    onSignOut: () -> Unit
 ) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
@@ -130,7 +137,7 @@ private fun StockApp(
     }
 
     Scaffold(
-        topBar = { MainTopBar(route, medicineViewModel, userEmail) },
+        topBar = { MainTopBar(route, medicineViewModel, userEmail, onSignOut) },
         bottomBar = { MainBottomBar(route, navController) },
         snackbarHost = { SnackbarHost(snackbarHostState) },
         floatingActionButton = {
@@ -167,7 +174,8 @@ private fun StockApp(
 private fun MainTopBar(
     route: String?,
     medicineViewModel: MedicineViewModel,
-    userEmail: String?
+    userEmail: String?,
+    onSignOut: () -> Unit
 ) {
     var isSearchActive by rememberSaveable { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
@@ -228,6 +236,12 @@ private fun MainTopBar(
                             )
                         }
                     }
+                }
+                IconButton(onClick = onSignOut) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.Logout,
+                        contentDescription = "Se deconnecter"
+                    )
                 }
             }
         )

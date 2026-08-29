@@ -43,6 +43,11 @@ class AuthViewModel : ViewModel() {
         _uiState.value = _uiState.value.copy(errorMessage = null)
     }
 
+    fun signOut() {
+        auth.signOut()
+        _uiState.value = AuthUiState()
+    }
+
     private fun authenticate(
         email: String,
         password: String,
