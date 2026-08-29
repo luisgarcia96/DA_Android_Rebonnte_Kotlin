@@ -24,6 +24,8 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
     private var allMedicines: List<Medicine> = emptyList()
     private val _medicines = MutableStateFlow(loadMedicines().also { allMedicines = it })
     val medicines: StateFlow<List<Medicine>> = _medicines.asStateFlow()
+    private var searchQuery = ""
+    private var sortOrder = SortOrder.NONE
 
     fun addRandomMedicine(aisles: List<Aisle>) {
         if (aisles.isEmpty()) {
@@ -41,13 +43,13 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
             )
         )
         allMedicines = updatedMedicines
-        _medicines.value = allMedicines
+        publishVisibleMedicines()
         persistMedicines()
     }
 
     suspend fun addMedicine(medicine: Medicine) {
         allMedicines = allMedicines + medicine
-        _medicines.value = allMedicines
+        publishVisibleMedicines()
         persistMedicinesAsync(allMedicines)
     }
 
@@ -68,13 +70,13 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
             )
         }
         allMedicines = allMedicines + testMedicines
-        _medicines.value = allMedicines
+        publishVisibleMedicines()
         persistMedicines()
     }
 
     fun clearAllMedicines() {
         allMedicines = emptyList()
-        _medicines.value = emptyList()
+        publishVisibleMedicines()
         persistMedicines()
     }
 
@@ -86,7 +88,7 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
 
         updatedMedicines[medicineIndex] = updatedMedicine
         allMedicines = updatedMedicines
-        _medicines.value = allMedicines
+        publishVisibleMedicines()
         persistMedicinesAsync(allMedicines)
     }
 
@@ -96,7 +98,7 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
         if (updatedMedicines.size == allMedicines.size) return
 
         allMedicines = updatedMedicines
-        _medicines.value = allMedicines
+        publishVisibleMedicines()
         persistMedicinesAsync(allMedicines)
     }
 
@@ -105,24 +107,23 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun filterByName(name: String) {
-        val normalizedName = name.lowercase(Locale.getDefault())
-        _medicines.value = allMedicines.filter { medicine ->
-            medicine.name.lowercase(Locale.getDefault()).contains(normalizedName)
-        }
+        searchQuery = name
+        publishVisibleMedicines()
     }
 
     fun sortByNone() {
-        _medicines.value = allMedicines
+        sortOrder = SortOrder.NONE
+        publishVisibleMedicines()
     }
 
     fun sortByName() {
-        allMedicines = allMedicines.sortedBy { it.name }
-        _medicines.value = allMedicines
+        sortOrder = SortOrder.NAME
+        publishVisibleMedicines()
     }
 
     fun sortByStock() {
-        allMedicines = allMedicines.sortedBy { it.stock }
-        _medicines.value = allMedicines
+        sortOrder = SortOrder.STOCK
+        publishVisibleMedicines()
     }
 
     fun updateStock(medicineName: String, delta: Int) {
@@ -148,15 +149,25 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
             histories = medicine.histories + history
         )
         allMedicines = updatedMedicines
-        _medicines.value = medicines.value.map { currentMedicine ->
-            allMedicines.first { it.name == currentMedicine.name }
-        }
+        publishVisibleMedicines()
         persistMedicines()
     }
 
     fun reload() {
         allMedicines = loadMedicines()
-        _medicines.value = allMedicines
+        publishVisibleMedicines()
+    }
+
+    private fun publishVisibleMedicines() {
+        val normalizedQuery = searchQuery.lowercase(Locale.ROOT)
+        val filteredMedicines = allMedicines.filter { medicine ->
+            medicine.name.lowercase(Locale.ROOT).contains(normalizedQuery)
+        }
+        _medicines.value = when (sortOrder) {
+            SortOrder.NONE -> filteredMedicines
+            SortOrder.NAME -> filteredMedicines.sortedBy { it.name.lowercase(Locale.ROOT) }
+            SortOrder.STOCK -> filteredMedicines.sortedBy { it.stock }
+        }
     }
 
     private fun loadMedicines(): List<Medicine> {
@@ -239,5 +250,11 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
         const val HISTORIES_KEY = "histories"
         const val LOCAL_USER_ID = "local-user"
         const val TEST_MEDICINE_COUNT = 25
+    }
+
+    private enum class SortOrder {
+        NONE,
+        NAME,
+        STOCK
     }
 }
