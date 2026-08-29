@@ -24,6 +24,7 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
     private var allMedicines: List<Medicine> = emptyList()
     private val _medicines = MutableStateFlow(loadMedicines().also { allMedicines = it })
     val medicines: StateFlow<List<Medicine>> = _medicines.asStateFlow()
+    private var deletedMedicineHistories = loadDeletedMedicineHistories()
     private var searchQuery = ""
     private var sortOrder = SortOrder.NONE
 
@@ -34,12 +35,13 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
         }
 
         val updatedMedicines = ArrayList(allMedicines)
+        val medicineName = "Medicine " + (updatedMedicines.size + 1)
         updatedMedicines.add(
             Medicine(
-                "Medicine " + (updatedMedicines.size + 1),
+                medicineName,
                 Random().nextInt(100),
                 aisles[Random().nextInt(aisles.size)].name,
-                emptyList()
+                listOf(createHistory(medicineName, "Medicine created"))
             )
         )
         allMedicines = updatedMedicines
@@ -48,7 +50,10 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
     }
 
     suspend fun addMedicine(medicine: Medicine) {
-        allMedicines = allMedicines + medicine
+        val medicineWithHistory = medicine.copy(
+            histories = medicine.histories + createHistory(medicine.name, "Medicine created")
+        )
+        allMedicines = allMedicines + medicineWithHistory
         publishVisibleMedicines()
         persistMedicinesAsync(allMedicines)
     }
@@ -66,7 +71,7 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
                 name = "Test Medicine $number",
                 stock = number % 100,
                 nameAisle = aisleNames[index % aisleNames.size],
-                histories = emptyList()
+                histories = listOf(createHistory("Test Medicine $number", "Medicine created"))
             )
         }
         allMedicines = allMedicines + testMedicines
@@ -86,20 +91,30 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
 
         if (medicineIndex == -1) return
 
-        updatedMedicines[medicineIndex] = updatedMedicine
+        val originalMedicine = updatedMedicines[medicineIndex]
+        updatedMedicines[medicineIndex] = updatedMedicine.copy(
+            histories = originalMedicine.histories + createHistory(
+                updatedMedicine.name,
+                getUpdateDetails(originalMedicine, updatedMedicine)
+            )
+        )
         allMedicines = updatedMedicines
         publishVisibleMedicines()
         persistMedicinesAsync(allMedicines)
     }
 
     suspend fun deleteMedicine(medicineName: String) {
+        val deletedMedicine = allMedicines.find { it.name == medicineName } ?: return
         val updatedMedicines = allMedicines.filterNot { it.name == medicineName }
 
-        if (updatedMedicines.size == allMedicines.size) return
-
         allMedicines = updatedMedicines
+        deletedMedicineHistories = deletedMedicineHistories + createHistory(
+            deletedMedicine.name,
+            "Medicine deleted from ${deletedMedicine.nameAisle} with stock ${deletedMedicine.stock}"
+        )
         publishVisibleMedicines()
         persistMedicinesAsync(allMedicines)
+        persistDeletedMedicineHistoriesAsync()
     }
 
     fun clearError() {
@@ -138,11 +153,9 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
         if (updatedStock == medicine.stock) return
 
         val direction = if (delta > 0) "increased" else "decreased"
-        val history = History(
-            medicineName = medicine.name,
-            userId = LOCAL_USER_ID,
-            date = Date().toString(),
-            details = "Stock $direction from ${medicine.stock} to $updatedStock"
+        val history = createHistory(
+            medicine.name,
+            "Stock $direction from ${medicine.stock} to $updatedStock"
         )
         updatedMedicines[medicineIndex] = medicine.copy(
             stock = updatedStock,
@@ -177,19 +190,7 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
             List(medicinesArray.length()) { index ->
                 val medicineObject = medicinesArray.getJSONObject(index)
                 val historiesArray = medicineObject.optJSONArray(HISTORIES_KEY)
-                val histories = if (historiesArray == null) {
-                    emptyList()
-                } else {
-                    List(historiesArray.length()) { historyIndex ->
-                        val historyObject = historiesArray.getJSONObject(historyIndex)
-                        History(
-                            medicineName = historyObject.getString("medicineName"),
-                            userId = historyObject.getString("userId"),
-                            date = historyObject.getString("date"),
-                            details = historyObject.getString("details")
-                        )
-                    }
-                }
+                val histories = historiesArray?.toHistories().orEmpty()
                 Medicine(
                     name = medicineObject.getString("name"),
                     stock = medicineObject.getInt("stock"),
@@ -209,6 +210,13 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    private suspend fun persistDeletedMedicineHistoriesAsync() {
+        val histories = deletedMedicineHistories
+        withContext(Dispatchers.IO) {
+            persistDeletedMedicineHistories(histories)
+        }
+    }
+
     private fun persistMedicines(medicines: List<Medicine> = allMedicines) {
         val medicinesArray = JSONArray()
         medicines.forEach { medicine ->
@@ -217,17 +225,7 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
                 .put("stock", medicine.stock)
                 .put("nameAisle", medicine.nameAisle)
 
-            val historiesArray = JSONArray()
-            medicine.histories.forEach { history ->
-                historiesArray.put(
-                    JSONObject()
-                        .put("medicineName", history.medicineName)
-                        .put("userId", history.userId)
-                        .put("date", history.date)
-                        .put("details", history.details)
-                )
-            }
-            medicineObject.put(HISTORIES_KEY, historiesArray)
+            medicineObject.put(HISTORIES_KEY, medicine.histories.toJsonArray())
             medicinesArray.put(medicineObject)
         }
 
@@ -240,6 +238,69 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    private fun loadDeletedMedicineHistories(): List<History> {
+        val storedHistories = preferences.getString(DELETED_MEDICINE_HISTORIES_KEY, null)
+            ?: return emptyList()
+        return runCatching {
+            JSONArray(storedHistories).toHistories()
+        }.getOrElse {
+            showError("Impossible de lire l'historique des suppressions.")
+            emptyList()
+        }
+    }
+
+    private fun persistDeletedMedicineHistories(histories: List<History>) {
+        runCatching {
+            preferences.edit {
+                putString(DELETED_MEDICINE_HISTORIES_KEY, histories.toJsonArray().toString())
+            }
+        }.onFailure {
+            showError("Impossible d'enregistrer l'historique des suppressions.")
+        }
+    }
+
+    private fun getUpdateDetails(original: Medicine, updated: Medicine): String {
+        val changes = buildList {
+            if (original.name != updated.name) add("name changed from ${original.name} to ${updated.name}")
+            if (original.nameAisle != updated.nameAisle) {
+                add("aisle changed from ${original.nameAisle} to ${updated.nameAisle}")
+            }
+            if (original.stock != updated.stock) {
+                add("stock changed from ${original.stock} to ${updated.stock}")
+            }
+        }
+        return if (changes.isEmpty()) "Medicine updated" else "Medicine updated: ${changes.joinToString()}"
+    }
+
+    private fun createHistory(medicineName: String, details: String) = History(
+        medicineName = medicineName,
+        userId = LOCAL_USER_ID,
+        date = Date().toString(),
+        details = details
+    )
+
+    private fun JSONArray.toHistories(): List<History> = List(length()) { index ->
+        val historyObject = getJSONObject(index)
+        History(
+            medicineName = historyObject.getString("medicineName"),
+            userId = historyObject.getString("userId"),
+            date = historyObject.getString("date"),
+            details = historyObject.getString("details")
+        )
+    }
+
+    private fun List<History>.toJsonArray() = JSONArray().also { historiesArray ->
+        forEach { history ->
+            historiesArray.put(
+                JSONObject()
+                    .put("medicineName", history.medicineName)
+                    .put("userId", history.userId)
+                    .put("date", history.date)
+                    .put("details", history.details)
+            )
+        }
+    }
+
     private fun showError(message: String) {
         _errorMessage.value = message
     }
@@ -248,6 +309,7 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
         const val PREFERENCES_NAME = "rebonnte_preferences"
         const val MEDICINES_KEY = "medicines"
         const val HISTORIES_KEY = "histories"
+        const val DELETED_MEDICINE_HISTORIES_KEY = "deleted_medicine_histories"
         const val LOCAL_USER_ID = "local-user"
         const val TEST_MEDICINE_COUNT = 25
     }
