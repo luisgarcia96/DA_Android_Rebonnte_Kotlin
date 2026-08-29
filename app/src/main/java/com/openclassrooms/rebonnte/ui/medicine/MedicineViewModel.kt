@@ -12,6 +12,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.Random
@@ -41,7 +42,13 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
                 medicineName,
                 Random().nextInt(100),
                 aisles[Random().nextInt(aisles.size)].name,
-                listOf(createHistory(medicineName, "Medicine created"))
+                listOf(
+                    createHistory(
+                        medicineName,
+                        "Medicine created",
+                        "Name: $medicineName"
+                    )
+                )
             )
         )
         allMedicines = updatedMedicines
@@ -51,7 +58,11 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
 
     suspend fun addMedicine(medicine: Medicine) {
         val medicineWithHistory = medicine.copy(
-            histories = medicine.histories + createHistory(medicine.name, "Medicine created")
+            histories = medicine.histories + createHistory(
+                medicine.name,
+                "Medicine created",
+                "Aisle: ${medicine.nameAisle}; initial stock: ${medicine.stock}"
+            )
         )
         allMedicines = allMedicines + medicineWithHistory
         publishVisibleMedicines()
@@ -71,7 +82,13 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
                 name = "Test Medicine $number",
                 stock = number % 100,
                 nameAisle = aisleNames[index % aisleNames.size],
-                histories = listOf(createHistory("Test Medicine $number", "Medicine created"))
+                histories = listOf(
+                    createHistory(
+                        "Test Medicine $number",
+                        "Medicine created",
+                        "Aisle: ${aisleNames[index % aisleNames.size]}; initial stock: ${number % 100}"
+                    )
+                )
             )
         }
         allMedicines = allMedicines + testMedicines
@@ -95,6 +112,7 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
         updatedMedicines[medicineIndex] = updatedMedicine.copy(
             histories = originalMedicine.histories + createHistory(
                 updatedMedicine.name,
+                "Medicine updated",
                 getUpdateDetails(originalMedicine, updatedMedicine)
             )
         )
@@ -110,7 +128,8 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
         allMedicines = updatedMedicines
         deletedMedicineHistories = deletedMedicineHistories + createHistory(
             deletedMedicine.name,
-            "Medicine deleted from ${deletedMedicine.nameAisle} with stock ${deletedMedicine.stock}"
+            "Medicine deleted",
+            "Aisle: ${deletedMedicine.nameAisle}; final stock: ${deletedMedicine.stock}"
         )
         publishVisibleMedicines()
         persistMedicinesAsync(allMedicines)
@@ -155,7 +174,8 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
         val direction = if (delta > 0) "increased" else "decreased"
         val history = createHistory(
             medicine.name,
-            "Stock $direction from ${medicine.stock} to $updatedStock"
+            "Stock $direction",
+            "Stock: ${medicine.stock} -> $updatedStock"
         )
         updatedMedicines[medicineIndex] = medicine.copy(
             stock = updatedStock,
@@ -261,23 +281,32 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
 
     private fun getUpdateDetails(original: Medicine, updated: Medicine): String {
         val changes = buildList {
-            if (original.name != updated.name) add("name changed from ${original.name} to ${updated.name}")
+            if (original.name != updated.name) add("Name: ${original.name} -> ${updated.name}")
             if (original.nameAisle != updated.nameAisle) {
-                add("aisle changed from ${original.nameAisle} to ${updated.nameAisle}")
+                add("Aisle: ${original.nameAisle} -> ${updated.nameAisle}")
             }
             if (original.stock != updated.stock) {
-                add("stock changed from ${original.stock} to ${updated.stock}")
+                add("Stock: ${original.stock} -> ${updated.stock}")
             }
         }
-        return if (changes.isEmpty()) "Medicine updated" else "Medicine updated: ${changes.joinToString()}"
+        return if (changes.isEmpty()) "No value changed" else changes.joinToString()
     }
 
-    private fun createHistory(medicineName: String, details: String) = History(
+    private fun createHistory(medicineName: String, action: String, details: String) = History(
         medicineName = medicineName,
         userId = LOCAL_USER_ID,
-        date = Date().toString(),
+        date = HISTORY_DATE_FORMAT.format(Date()),
+        action = action,
         details = details
     )
+
+    private fun inferAction(details: String): String = when {
+        details.startsWith("Stock") -> "Stock variation"
+        details.startsWith("Medicine created") -> "Medicine created"
+        details.startsWith("Medicine updated") -> "Medicine updated"
+        details.startsWith("Medicine deleted") -> "Medicine deleted"
+        else -> "Recorded action"
+    }
 
     private fun JSONArray.toHistories(): List<History> = List(length()) { index ->
         val historyObject = getJSONObject(index)
@@ -285,6 +314,9 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
             medicineName = historyObject.getString("medicineName"),
             userId = historyObject.getString("userId"),
             date = historyObject.getString("date"),
+            action = historyObject.optString("action").ifBlank {
+                inferAction(historyObject.getString("details"))
+            },
             details = historyObject.getString("details")
         )
     }
@@ -296,6 +328,7 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
                     .put("medicineName", history.medicineName)
                     .put("userId", history.userId)
                     .put("date", history.date)
+                    .put("action", history.action)
                     .put("details", history.details)
             )
         }
@@ -312,6 +345,7 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
         const val DELETED_MEDICINE_HISTORIES_KEY = "deleted_medicine_histories"
         const val LOCAL_USER_ID = "local-user"
         const val TEST_MEDICINE_COUNT = 25
+        val HISTORY_DATE_FORMAT = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
     }
 
     private enum class SortOrder {

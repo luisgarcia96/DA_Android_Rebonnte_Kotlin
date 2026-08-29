@@ -368,6 +368,7 @@ fun HistoryItem(history: History) {
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(text = history.medicineName, fontWeight = FontWeight.Bold)
+            Text(text = "Action: ${history.action}")
             Text(text = "User: ${history.userId}")
             Text(text = "Date: ${history.date}")
             Text(text = "Details: ${history.details}")
