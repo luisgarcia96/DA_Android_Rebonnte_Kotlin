@@ -1,6 +1,7 @@
 package com.openclassrooms.rebonnte.ui.medicine
 
 import android.os.Bundle
+import android.util.Patterns
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
@@ -360,6 +361,10 @@ private fun LoadingButtonContent(label: String, isLoading: Boolean) {
 
 @Composable
 fun HistoryItem(history: History) {
+    val operatorEmail = history.userId.takeIf { userId ->
+        Patterns.EMAIL_ADDRESS.matcher(userId).matches()
+    } ?: "Email unavailable"
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -369,7 +374,7 @@ fun HistoryItem(history: History) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(text = history.medicineName, fontWeight = FontWeight.Bold)
             Text(text = "Action: ${history.action}")
-            Text(text = "User: ${history.userId}")
+            Text(text = "Operator: $operatorEmail")
             Text(text = "Date: ${history.date}")
             Text(text = "Details: ${history.details}")
         }
