@@ -7,12 +7,15 @@ import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.Query
 import com.openclassrooms.rebonnte.ui.aisle.Aisle
 import com.openclassrooms.rebonnte.ui.history.History
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.tasks.await
 import org.json.JSONArray
 import org.json.JSONObject
@@ -32,6 +35,7 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
     val medicines: StateFlow<List<Medicine>> = _medicines.asStateFlow()
     private var searchQuery = ""
     private var sortOrder = SortOrder.NONE
+    private var searchJob: Job? = null
 
     init {
         reload()
@@ -176,22 +180,26 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
 
     fun filterByName(name: String) {
         searchQuery = name
-        publishVisibleMedicines()
+        searchJob?.cancel()
+        searchJob = viewModelScope.launch {
+            delay(SEARCH_DEBOUNCE_MS)
+            reload()
+        }
     }
 
     fun sortByNone() {
         sortOrder = SortOrder.NONE
-        publishVisibleMedicines()
+        reload()
     }
 
     fun sortByName() {
         sortOrder = SortOrder.NAME
-        publishVisibleMedicines()
+        reload()
     }
 
     fun sortByStock() {
         sortOrder = SortOrder.STOCK
-        publishVisibleMedicines()
+        reload()
     }
 
     fun updateStock(medicineName: String, delta: Int) {
@@ -231,7 +239,8 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
 
         viewModelScope.launch {
             runCatching {
-                val remoteMedicines = medicinesCollection.get().await().documents.mapNotNull { document ->
+                ensureSearchFields()
+                val remoteMedicines = medicineQuery().get().await().documents.mapNotNull { document ->
                     document.toMedicine()
                 }
                 when {
@@ -280,15 +289,56 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
     }
 
     private fun publishVisibleMedicines() {
-        val normalizedQuery = searchQuery.lowercase(Locale.ROOT)
-        val filteredMedicines = allMedicines.filter { medicine ->
-            medicine.name.lowercase(Locale.ROOT).contains(normalizedQuery)
-        }
         _medicines.value = when (sortOrder) {
-            SortOrder.NONE -> filteredMedicines
-            SortOrder.NAME -> filteredMedicines.sortedBy { it.name.lowercase(Locale.ROOT) }
-            SortOrder.STOCK -> filteredMedicines.sortedBy { it.stock }
+            SortOrder.NONE -> allMedicines
+            SortOrder.NAME -> allMedicines.sortedBy { it.name.lowercase(Locale.ROOT) }
+            SortOrder.STOCK -> allMedicines.sortedBy { it.stock }
         }
+    }
+
+    private suspend fun ensureSearchFields() {
+        val normalizedNamesComplete = preferences.getBoolean(QUERY_MIGRATION_COMPLETE_KEY, false)
+        val searchTokensComplete = preferences.getBoolean(SEARCH_TOKENS_MIGRATION_COMPLETE_KEY, false)
+        val searchSubstringsComplete = preferences.getBoolean(
+            SEARCH_SUBSTRINGS_MIGRATION_COMPLETE_KEY,
+            false
+        )
+        if (normalizedNamesComplete && searchTokensComplete && searchSubstringsComplete) return
+
+        val documents = medicinesCollection.get().await().documents
+        val batch = firestore.batch()
+        documents.forEach { document ->
+            document.getString(NAME_FIELD)?.let { name ->
+                if (!normalizedNamesComplete && document.getString(NORMALIZED_NAME_FIELD) == null) {
+                    batch.update(document.reference, NORMALIZED_NAME_FIELD, name.normalizeForSearch())
+                }
+                if (
+                    !searchSubstringsComplete ||
+                    (!searchTokensComplete && document.get(SEARCH_TOKENS_FIELD) == null)
+                ) {
+                    batch.update(document.reference, SEARCH_TOKENS_FIELD, name.searchTokens())
+                }
+            }
+        }
+        batch.commit().await()
+        preferences.edit()
+            .putBoolean(QUERY_MIGRATION_COMPLETE_KEY, true)
+            .putBoolean(SEARCH_TOKENS_MIGRATION_COMPLETE_KEY, true)
+            .putBoolean(SEARCH_SUBSTRINGS_MIGRATION_COMPLETE_KEY, true)
+            .apply()
+    }
+
+    private fun medicineQuery(): Query {
+        val normalizedQuery = searchQuery.normalizeForSearch()
+        if (normalizedQuery.isNotBlank()) {
+            return medicinesCollection.whereArrayContains(SEARCH_TOKENS_FIELD, normalizedQuery)
+        }
+        val orderField = if (sortOrder == SortOrder.STOCK) {
+            STOCK_FIELD
+        } else {
+            NORMALIZED_NAME_FIELD
+        }
+        return medicinesCollection.orderBy(orderField)
     }
 
     private fun loadLegacyMedicines(): List<Medicine> {
@@ -322,10 +372,23 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
 
     private fun Medicine.toDocument() = mapOf(
         NAME_FIELD to name,
+        NORMALIZED_NAME_FIELD to name.normalizeForSearch(),
+        SEARCH_TOKENS_FIELD to name.searchTokens(),
         STOCK_FIELD to stock,
         AISLE_FIELD to nameAisle,
         HISTORIES_FIELD to histories.map { it.toDocument() }
     )
+
+    private fun String.searchTokens(): List<String> {
+        val normalizedName = normalizeForSearch()
+        return buildSet {
+            normalizedName.indices.forEach { startIndex ->
+                (startIndex + 1..normalizedName.length).forEach { endIndex ->
+                    add(normalizedName.substring(startIndex, endIndex))
+                }
+            }
+        }.toList()
+    }
 
     private fun History.toDocument() = mapOf(
         HISTORY_MEDICINE_NAME_FIELD to medicineName,
@@ -389,6 +452,8 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
         _errorMessage.value = message
     }
 
+    private fun String.normalizeForSearch() = trim().lowercase(Locale.ROOT)
+
     private val medicinesCollection
         get() = firestore.collection(MEDICINES_COLLECTION)
 
@@ -409,9 +474,16 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
         const val MEDICINES_KEY = "medicines"
         const val MIGRATION_COMPLETE_KEY = "firestore_medicines_migration_complete"
         const val NAME_FIELD = "name"
+        const val NORMALIZED_NAME_FIELD = "normalizedName"
         const val PREFERENCES_NAME = "rebonnte_preferences"
         const val STOCK_FIELD = "stock"
         const val TEST_MEDICINE_COUNT = 25
+        const val QUERY_MIGRATION_COMPLETE_KEY = "firestore_medicines_query_migration_complete"
+        const val SEARCH_DEBOUNCE_MS = 300L
+        const val SEARCH_SUBSTRINGS_MIGRATION_COMPLETE_KEY =
+            "firestore_medicines_search_substrings_migration_complete"
+        const val SEARCH_TOKENS_FIELD = "searchTokens"
+        const val SEARCH_TOKENS_MIGRATION_COMPLETE_KEY = "firestore_medicines_search_tokens_migration_complete"
     }
 
     private enum class SortOrder {
