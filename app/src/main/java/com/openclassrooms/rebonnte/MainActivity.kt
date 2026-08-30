@@ -83,6 +83,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         medicineViewModel.reload()
+        aisleViewModel.reload()
     }
 }
 
@@ -94,6 +95,13 @@ fun MyApp(
     authViewModel: AuthViewModel
 ) {
     val authState by authViewModel.uiState.collectAsState()
+
+    LaunchedEffect(authState.isAuthenticated) {
+        if (authState.isAuthenticated) {
+            medicineViewModel.reload()
+            aisleViewModel.reload()
+        }
+    }
 
     RebonnteTheme {
         if (authState.isAuthenticated) {
@@ -137,6 +145,15 @@ private fun StockApp(
             }
     }
 
+    LaunchedEffect(aisleViewModel) {
+        aisleViewModel.errorMessage
+            .filterNotNull()
+            .collectLatest { message ->
+                snackbarHostState.showSnackbar(message)
+                aisleViewModel.clearError()
+            }
+    }
+
     Scaffold(
         topBar = { MainTopBar(route, medicineViewModel, userEmail, onSignOut) },
         bottomBar = { MainBottomBar(route, navController) },
@@ -155,10 +172,9 @@ private fun StockApp(
                 MedicineScreen(
                     medicineViewModel,
                     onAddTestData = {
-                        repeat(5) { aisleViewModel.addRandomAisle() }
-                        medicineViewModel.addTestMedicines(
-                            aisleViewModel.aisles.value.map { it.name }
-                        )
+                        aisleViewModel.addTestAisles(5) { aisleNames ->
+                            medicineViewModel.addTestMedicines(aisleNames)
+                        }
                     },
                     onClearAllData = {
                         medicineViewModel.clearAllMedicines()

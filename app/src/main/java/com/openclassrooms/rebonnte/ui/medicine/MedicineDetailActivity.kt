@@ -30,6 +30,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -65,14 +66,24 @@ class MedicineDetailActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val name = intent.getStringExtra("nameMedicine") ?: "Unknown"
         val isNewMedicine = intent.getBooleanExtra("isNewMedicine", false)
-        val aisleNames = aisleViewModel.aisles.value.map { it.name }
 
         setContent {
+            val aisleNames by aisleViewModel.aisles.collectAsState(initial = emptyList())
+
             RebonnteTheme {
                 if (isNewMedicine) {
-                    NewMedicineScreen(aisleNames, viewModel, onSaved = ::finish)
+                    NewMedicineScreen(
+                        aisleNames = aisleNames.map { it.name },
+                        viewModel = viewModel,
+                        onSaved = ::finish
+                    )
                 } else {
-                    MedicineDetailScreen(name, aisleNames, viewModel, onDeleted = ::finish)
+                    MedicineDetailScreen(
+                        name = name,
+                        aisleNames = aisleNames.map { it.name },
+                        viewModel = viewModel,
+                        onDeleted = ::finish
+                    )
                 }
             }
         }
@@ -91,6 +102,12 @@ fun NewMedicineScreen(
     var validationError by rememberSaveable { mutableStateOf<String?>(null) }
     var isSaving by rememberSaveable { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
+
+    LaunchedEffect(aisleNames) {
+        if (selectedAisle.isBlank()) {
+            selectedAisle = aisleNames.firstOrNull().orEmpty()
+        }
+    }
 
     Scaffold { paddingValues ->
         Column(
