@@ -4,6 +4,8 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.runtime.Composable
 import android.content.Intent
 import android.os.Bundle
@@ -165,7 +167,11 @@ private fun StockApp(
         NavHost(
             modifier = Modifier.padding(it),
             navController = navController,
-            startDestination = "aisle"
+            startDestination = "aisle",
+            enterTransition = { EnterTransition.None },
+            exitTransition = { ExitTransition.None },
+            popEnterTransition = { EnterTransition.None },
+            popExitTransition = { ExitTransition.None }
         ) {
             composable("aisle") { AisleScreen(aisleViewModel) }
             composable("medicine") {
