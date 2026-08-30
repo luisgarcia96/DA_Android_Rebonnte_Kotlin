@@ -52,6 +52,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -269,14 +270,24 @@ private fun MainBottomBar(
             icon = { Icon(Icons.Default.Home, contentDescription = null) },
             label = { Text("Aisle") },
             selected = route == "aisle",
-            onClick = { navController.navigate("aisle") }
+            onClick = { navController.navigateToTopLevelDestination("aisle") }
         )
         NavigationBarItem(
             icon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = null) },
             label = { Text("Medicine") },
             selected = route == "medicine",
-            onClick = { navController.navigate("medicine") }
+            onClick = { navController.navigateToTopLevelDestination("medicine") }
         )
+    }
+}
+
+private fun NavController.navigateToTopLevelDestination(route: String) {
+    navigate(route) {
+        popUpTo(graph.findStartDestination().id) {
+            saveState = true
+        }
+        launchSingleTop = true
+        restoreState = true
     }
 }
 
