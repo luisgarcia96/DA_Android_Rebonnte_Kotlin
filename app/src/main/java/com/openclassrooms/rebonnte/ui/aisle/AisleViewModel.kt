@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import org.json.JSONArray
+import java.util.Locale
 
 class AisleViewModel(application: Application) : AndroidViewModel(application) {
     private val preferences = application.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
@@ -21,6 +22,8 @@ class AisleViewModel(application: Application) : AndroidViewModel(application) {
     val aisles: StateFlow<List<Aisle>> = _aisles.asStateFlow()
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
+    private var allAisles: List<Aisle> = emptyList()
+    private var searchQuery = ""
 
     init {
         reload()
@@ -28,11 +31,12 @@ class AisleViewModel(application: Application) : AndroidViewModel(application) {
 
     fun addRandomAisle() {
         viewModelScope.launch {
-            val aisle = Aisle("Aisle ${_aisles.value.size + 1}")
+            val aisle = Aisle("Aisle ${allAisles.size + 1}")
             runCatching {
                 saveAisle(aisle)
             }.onSuccess {
-                _aisles.value = _aisles.value + aisle
+                allAisles = allAisles + aisle
+                publishVisibleAisles()
             }.onFailure {
                 showError("Impossible d'enregistrer le rayon.")
             }
@@ -41,7 +45,7 @@ class AisleViewModel(application: Application) : AndroidViewModel(application) {
 
     fun addTestAisles(count: Int, onSuccess: (List<String>) -> Unit) {
         viewModelScope.launch {
-            val firstAisleNumber = _aisles.value.size + 1
+            val firstAisleNumber = allAisles.size + 1
             val newAisles = List(count) { index ->
                 Aisle("Aisle ${firstAisleNumber + index}")
             }
@@ -53,8 +57,9 @@ class AisleViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 batch.commit().await()
             }.onSuccess {
-                _aisles.value = _aisles.value + newAisles
-                onSuccess(_aisles.value.map { it.name })
+                allAisles = allAisles + newAisles
+                publishVisibleAisles()
+                onSuccess(allAisles.map { it.name })
             }.onFailure {
                 showError("Impossible de créer les rayons de test.")
             }
@@ -74,7 +79,8 @@ class AisleViewModel(application: Application) : AndroidViewModel(application) {
                 batch.set(aislesCollection.document(defaultAisle.id), defaultAisle.toDocument())
                 batch.commit().await()
             }.onSuccess {
-                _aisles.value = listOf(defaultAisle)
+                allAisles = listOf(defaultAisle)
+                publishVisibleAisles()
                 preferences.edit().putBoolean(MIGRATION_COMPLETE_KEY, true).apply()
             }.onFailure {
                 showError("Impossible de supprimer les rayons de test.")
@@ -99,7 +105,8 @@ class AisleViewModel(application: Application) : AndroidViewModel(application) {
                     else -> migrateLegacyAisles()
                 }
             }.onSuccess { loadedAisles ->
-                _aisles.value = loadedAisles.sortedBy { it.name }
+                allAisles = loadedAisles
+                publishVisibleAisles()
             }.onFailure {
                 showError("Impossible de charger les rayons depuis Firestore.")
             }
@@ -108,6 +115,18 @@ class AisleViewModel(application: Application) : AndroidViewModel(application) {
 
     fun clearError() {
         _errorMessage.value = null
+    }
+
+    fun filterByName(name: String) {
+        searchQuery = name
+        publishVisibleAisles()
+    }
+
+    private fun publishVisibleAisles() {
+        val normalizedQuery = searchQuery.lowercase(Locale.ROOT)
+        _aisles.value = allAisles
+            .filter { aisle -> aisle.name.lowercase(Locale.ROOT).contains(normalizedQuery) }
+            .sortedBy { it.name }
     }
 
     private suspend fun migrateLegacyAisles(): List<Aisle> {

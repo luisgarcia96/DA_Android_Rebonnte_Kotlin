@@ -158,7 +158,9 @@ private fun StockApp(
     }
 
     Scaffold(
-        topBar = { MainTopBar(route, medicineViewModel, userEmail, onSignOut) },
+        topBar = {
+            MainTopBar(route, medicineViewModel, aisleViewModel, userEmail, onSignOut)
+        },
         bottomBar = { MainBottomBar(route, navController) },
         snackbarHost = { SnackbarHost(snackbarHostState) },
         floatingActionButton = {
@@ -198,11 +200,14 @@ private fun StockApp(
 private fun MainTopBar(
     route: String?,
     medicineViewModel: MedicineViewModel,
+    aisleViewModel: AisleViewModel,
     userEmail: String?,
     onSignOut: () -> Unit
 ) {
-    var isSearchActive by rememberSaveable { mutableStateOf(false) }
-    var searchQuery by remember { mutableStateOf("") }
+    var isMedicineSearchActive by rememberSaveable { mutableStateOf(false) }
+    var medicineSearchQuery by rememberSaveable { mutableStateOf("") }
+    var isAisleSearchActive by rememberSaveable { mutableStateOf(false) }
+    var aisleSearchQuery by rememberSaveable { mutableStateOf("") }
     var isSortMenuExpanded by remember { mutableStateOf(false) }
 
     Column(verticalArrangement = Arrangement.spacedBy((-1).dp)) {
@@ -269,15 +274,26 @@ private fun MainTopBar(
                 }
             }
         )
-        if (route == "medicine") {
-            EmbeddedSearchBar(
-                query = searchQuery,
+        when (route) {
+            "aisle" -> EmbeddedSearchBar(
+                query = aisleSearchQuery,
+                onQueryChange = {
+                    aisleViewModel.filterByName(it)
+                    aisleSearchQuery = it
+                },
+                isSearchActive = isAisleSearchActive,
+                onActiveChanged = { isAisleSearchActive = it },
+                searchContentDescription = "Search aisles"
+            )
+            "medicine" -> EmbeddedSearchBar(
+                query = medicineSearchQuery,
                 onQueryChange = {
                     medicineViewModel.filterByName(it)
-                    searchQuery = it
+                    medicineSearchQuery = it
                 },
-                isSearchActive = isSearchActive,
-                onActiveChanged = { isSearchActive = it }
+                isSearchActive = isMedicineSearchActive,
+                onActiveChanged = { isMedicineSearchActive = it },
+                searchContentDescription = "Search medicines"
             )
         }
     }
@@ -352,11 +368,10 @@ fun EmbeddedSearchBar(
     onQueryChange: (String) -> Unit,
     isSearchActive: Boolean,
     onActiveChanged: (Boolean) -> Unit,
+    searchContentDescription: String,
     modifier: Modifier = Modifier,
 ) {
-    var searchQuery by rememberSaveable { mutableStateOf(query) }
     val activeChanged: (Boolean) -> Unit = { active ->
-        searchQuery = ""
         onQueryChange("")
         onActiveChanged(active)
     }
@@ -390,18 +405,15 @@ fun EmbeddedSearchBar(
         }
 
         BasicTextField(
-            value = searchQuery,
-            onValueChange = { query ->
-                searchQuery = query
-                onQueryChange(query)
-            },
+            value = query,
+            onValueChange = onQueryChange,
             modifier = Modifier
                 .weight(1f)
                 .padding(horizontal = 8.dp)
-                .semantics { contentDescription = "Search medicines" },
+                .semantics { contentDescription = searchContentDescription },
             singleLine = true,
             decorationBox = { innerTextField ->
-                if (searchQuery.isEmpty()) {
+                if (query.isEmpty()) {
                     Text(
                         text = "Search",
                         style = MaterialTheme.typography.bodyMedium,
@@ -412,9 +424,8 @@ fun EmbeddedSearchBar(
             }
         )
 
-        if (isSearchActive && searchQuery.isNotEmpty()) {
+        if (isSearchActive && query.isNotEmpty()) {
             IconButton(onClick = {
-                searchQuery = ""
                 onQueryChange("")
             }) {
                 Icon(
