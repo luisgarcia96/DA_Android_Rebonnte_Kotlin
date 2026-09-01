@@ -22,6 +22,7 @@ import com.openclassrooms.rebonnte.ui.theme.RebonnteTheme
 
 class AisleDetailActivity : ComponentActivity() {
     private val viewModel: MedicineViewModel by viewModels()
+    private var hasResumed = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -35,7 +36,10 @@ class AisleDetailActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        viewModel.reload()
+        if (hasResumed) {
+            viewModel.reload(force = true)
+        }
+        hasResumed = true
     }
 }
 

@@ -75,6 +75,7 @@ class MainActivity : ComponentActivity() {
     private val medicineViewModel: MedicineViewModel by viewModels()
     private val aisleViewModel: AisleViewModel by viewModels()
     private val authViewModel: AuthViewModel by viewModels()
+    private var hasResumed = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -85,8 +86,11 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        medicineViewModel.reload()
-        aisleViewModel.reload()
+        if (hasResumed) {
+            medicineViewModel.reload(force = true)
+            aisleViewModel.reload(force = true)
+        }
+        hasResumed = true
     }
 }
 

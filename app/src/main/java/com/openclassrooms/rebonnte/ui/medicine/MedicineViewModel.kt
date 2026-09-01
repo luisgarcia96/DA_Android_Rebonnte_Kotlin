@@ -18,8 +18,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -49,7 +47,8 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
     val operationEvents: SharedFlow<MedicineOperationEvent> = _operationEvents.asSharedFlow()
     private var searchQuery = ""
     private var sortOrder = SortOrder.NONE
-    private var searchJob: Job? = null
+    private var hasLoaded = false
+    private var isLoading = false
 
     init {
         reload()
@@ -236,26 +235,22 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
 
     fun filterByName(name: String) {
         searchQuery = name
-        searchJob?.cancel()
-        searchJob = viewModelScope.launch {
-            delay(SEARCH_DEBOUNCE_MS)
-            reload()
-        }
+        publishVisibleMedicines()
     }
 
     fun sortByNone() {
         sortOrder = SortOrder.NONE
-        reload()
+        publishVisibleMedicines()
     }
 
     fun sortByName() {
         sortOrder = SortOrder.NAME
-        reload()
+        publishVisibleMedicines()
     }
 
     fun sortByStock() {
         sortOrder = SortOrder.STOCK
-        reload()
+        publishVisibleMedicines()
     }
 
     fun updateStock(medicineName: String, delta: Int) {
@@ -290,30 +285,36 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    fun reload() {
-        if (auth.currentUser == null) return
+    fun reload(force: Boolean = false) {
+        if (auth.currentUser == null || isLoading || (hasLoaded && !force)) return
 
+        isLoading = true
         viewModelScope.launch {
-            runCatching {
-                withContext(Dispatchers.IO) {
-                    ensureSearchFields()
-                    val remoteMedicines = medicineQuery().get().await().documents.mapNotNull { document ->
-                        document.toMedicine()
-                    }
-                    when {
-                        remoteMedicines.isNotEmpty() -> {
-                            preferences.edit().putBoolean(MIGRATION_COMPLETE_KEY, true).apply()
-                            remoteMedicines
+            try {
+                runCatching {
+                    withContext(Dispatchers.IO) {
+                        ensureSearchFields()
+                        val remoteMedicines = medicineQuery().get().await().documents.mapNotNull { document ->
+                            document.toMedicine()
                         }
-                        preferences.getBoolean(MIGRATION_COMPLETE_KEY, false) -> emptyList()
-                        else -> migrateLegacyMedicines()
+                        when {
+                            remoteMedicines.isNotEmpty() -> {
+                                preferences.edit().putBoolean(MIGRATION_COMPLETE_KEY, true).apply()
+                                remoteMedicines
+                            }
+                            preferences.getBoolean(MIGRATION_COMPLETE_KEY, false) -> emptyList()
+                            else -> migrateLegacyMedicines()
+                        }
                     }
+                }.onSuccess { loadedMedicines ->
+                    hasLoaded = true
+                    allMedicines = loadedMedicines
+                    publishVisibleMedicines()
+                }.onFailure {
+                    showError("Impossible de charger les médicaments depuis Firestore.")
                 }
-            }.onSuccess { loadedMedicines ->
-                allMedicines = loadedMedicines
-                publishVisibleMedicines()
-            }.onFailure {
-                showError("Impossible de charger les médicaments depuis Firestore.")
+            } finally {
+                isLoading = false
             }
         }
     }
@@ -347,10 +348,14 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
     }
 
     private fun publishVisibleMedicines() {
+        val normalizedQuery = searchQuery.normalizeForSearch()
+        val filteredMedicines = allMedicines.filter { medicine ->
+            normalizedQuery.isBlank() || medicine.name.normalizeForSearch().contains(normalizedQuery)
+        }
         _medicines.value = when (sortOrder) {
-            SortOrder.NONE -> allMedicines
-            SortOrder.NAME -> allMedicines.sortedBy { it.name.lowercase(Locale.ROOT) }
-            SortOrder.STOCK -> allMedicines.sortedBy { it.stock }
+            SortOrder.NONE -> filteredMedicines
+            SortOrder.NAME -> filteredMedicines.sortedBy { it.name.lowercase(Locale.ROOT) }
+            SortOrder.STOCK -> filteredMedicines.sortedBy { it.stock }
         }
     }
 
@@ -387,16 +392,7 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
     }
 
     private fun medicineQuery(): Query {
-        val normalizedQuery = searchQuery.normalizeForSearch()
-        if (normalizedQuery.isNotBlank()) {
-            return medicinesCollection.whereArrayContains(SEARCH_TOKENS_FIELD, normalizedQuery)
-        }
-        val orderField = if (sortOrder == SortOrder.STOCK) {
-            STOCK_FIELD
-        } else {
-            NORMALIZED_NAME_FIELD
-        }
-        return medicinesCollection.orderBy(orderField)
+        return medicinesCollection.orderBy(NORMALIZED_NAME_FIELD)
     }
 
     private fun loadLegacyMedicines(): List<Medicine> {
@@ -516,7 +512,6 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
         const val STOCK_FIELD = "stock"
         const val TEST_MEDICINE_COUNT = 25
         const val QUERY_MIGRATION_COMPLETE_KEY = "firestore_medicines_query_migration_complete"
-        const val SEARCH_DEBOUNCE_MS = 300L
         const val SEARCH_SUBSTRINGS_MIGRATION_COMPLETE_KEY =
             "firestore_medicines_search_substrings_migration_complete"
         const val SEARCH_TOKENS_FIELD = "searchTokens"

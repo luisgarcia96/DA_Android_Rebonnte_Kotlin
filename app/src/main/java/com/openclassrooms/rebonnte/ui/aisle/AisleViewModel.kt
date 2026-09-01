@@ -24,6 +24,8 @@ class AisleViewModel(application: Application) : AndroidViewModel(application) {
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
     private var allAisles: List<Aisle> = emptyList()
     private var searchQuery = ""
+    private var hasLoaded = false
+    private var isLoading = false
 
     init {
         reload()
@@ -88,27 +90,33 @@ class AisleViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun reload() {
-        if (auth.currentUser == null) return
+    fun reload(force: Boolean = false) {
+        if (auth.currentUser == null || isLoading || (hasLoaded && !force)) return
 
+        isLoading = true
         viewModelScope.launch {
-            runCatching {
-                val remoteAisles = aislesCollection.get().await().documents.mapNotNull { document ->
-                    document.getString(NAME_FIELD)?.let { name -> Aisle(name, document.id) }
-                }
-                when {
-                    remoteAisles.isNotEmpty() -> {
-                        preferences.edit().putBoolean(MIGRATION_COMPLETE_KEY, true).apply()
-                        remoteAisles
+            try {
+                runCatching {
+                    val remoteAisles = aislesCollection.get().await().documents.mapNotNull { document ->
+                        document.getString(NAME_FIELD)?.let { name -> Aisle(name, document.id) }
                     }
-                    preferences.getBoolean(MIGRATION_COMPLETE_KEY, false) -> emptyList()
-                    else -> migrateLegacyAisles()
+                    when {
+                        remoteAisles.isNotEmpty() -> {
+                            preferences.edit().putBoolean(MIGRATION_COMPLETE_KEY, true).apply()
+                            remoteAisles
+                        }
+                        preferences.getBoolean(MIGRATION_COMPLETE_KEY, false) -> emptyList()
+                        else -> migrateLegacyAisles()
+                    }
+                }.onSuccess { loadedAisles ->
+                    hasLoaded = true
+                    allAisles = loadedAisles
+                    publishVisibleAisles()
+                }.onFailure {
+                    showError("Impossible de charger les rayons depuis Firestore.")
                 }
-            }.onSuccess { loadedAisles ->
-                allAisles = loadedAisles
-                publishVisibleAisles()
-            }.onFailure {
-                showError("Impossible de charger les rayons depuis Firestore.")
+            } finally {
+                isLoading = false
             }
         }
     }
