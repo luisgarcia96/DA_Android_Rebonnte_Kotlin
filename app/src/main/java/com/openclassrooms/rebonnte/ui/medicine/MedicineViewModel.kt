@@ -227,12 +227,7 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun validateMedicineFields(name: String, aisle: String, stock: String): String? {
-        if (name.isBlank()) return "Le nom du médicament est obligatoire."
-        if (aisle.isBlank()) return "Sélectionnez un rayon."
-
-        val stockValue = stock.toIntOrNull()
-            ?: return "Le stock doit être un nombre entier."
-        return if (stockValue < 0) "Le stock ne peut pas être négatif." else null
+        return MedicineRules.validateFields(name, aisle, stock)
     }
 
     fun clearError() {
@@ -269,7 +264,7 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
             if (medicineIndex == -1) return@launch
 
             val medicine = allMedicines[medicineIndex]
-            val updatedStock = (medicine.stock + delta).coerceAtLeast(0)
+            val updatedStock = MedicineRules.adjustedStock(medicine.stock, delta)
             if (updatedStock == medicine.stock) return@launch
 
             val direction = if (delta > 0) "increased" else "decreased"
@@ -379,7 +374,7 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
                     !searchSubstringsComplete ||
                     (!searchTokensComplete && document.get(SEARCH_TOKENS_FIELD) == null)
                 ) {
-                    batch.update(document.reference, SEARCH_TOKENS_FIELD, name.searchTokens())
+                    batch.update(document.reference, SEARCH_TOKENS_FIELD, MedicineRules.searchTokens(name))
                 }
             }
         }
@@ -436,22 +431,11 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
     private fun Medicine.toDocument() = mapOf(
         NAME_FIELD to name,
         NORMALIZED_NAME_FIELD to name.normalizeForSearch(),
-        SEARCH_TOKENS_FIELD to name.searchTokens(),
+        SEARCH_TOKENS_FIELD to MedicineRules.searchTokens(name),
         STOCK_FIELD to stock,
         AISLE_FIELD to nameAisle,
         HISTORIES_FIELD to histories.map { it.toDocument() }
     )
-
-    private fun String.searchTokens(): List<String> {
-        val normalizedName = normalizeForSearch()
-        return buildSet {
-            normalizedName.indices.forEach { startIndex ->
-                (startIndex + 1..normalizedName.length).forEach { endIndex ->
-                    add(normalizedName.substring(startIndex, endIndex))
-                }
-            }
-        }.toList()
-    }
 
     private fun History.toDocument() = mapOf(
         HISTORY_MEDICINE_NAME_FIELD to medicineName,
@@ -469,18 +453,8 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
         details = this[HISTORY_DETAILS_FIELD] as? String ?: ""
     )
 
-    private fun getUpdateDetails(original: Medicine, updated: Medicine): String {
-        val changes = buildList {
-            if (original.name != updated.name) add("Name: ${original.name} -> ${updated.name}")
-            if (original.nameAisle != updated.nameAisle) {
-                add("Aisle: ${original.nameAisle} -> ${updated.nameAisle}")
-            }
-            if (original.stock != updated.stock) {
-                add("Stock: ${original.stock} -> ${updated.stock}")
-            }
-        }
-        return if (changes.isEmpty()) "No value changed" else changes.joinToString()
-    }
+    private fun getUpdateDetails(original: Medicine, updated: Medicine) =
+        MedicineRules.updateDetails(original, updated)
 
     private fun createHistory(medicineName: String, action: String, details: String) = History(
         medicineName = medicineName,
@@ -515,7 +489,7 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
         _errorMessage.value = message
     }
 
-    private fun String.normalizeForSearch() = trim().lowercase(Locale.ROOT)
+    private fun String.normalizeForSearch() = MedicineRules.normalizeName(this)
 
     private val medicinesCollection
         get() = firestore.collection(MEDICINES_COLLECTION)
