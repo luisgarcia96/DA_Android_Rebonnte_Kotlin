@@ -34,7 +34,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -45,18 +44,7 @@ import com.openclassrooms.rebonnte.ui.history.History
 import com.openclassrooms.rebonnte.ui.aisle.AisleViewModel
 import com.openclassrooms.rebonnte.ui.components.AisleSelector
 import com.openclassrooms.rebonnte.ui.theme.RebonnteTheme
-import kotlinx.coroutines.launch
-
-private fun validateMedicineFields(name: String, aisle: String, stock: String): String? {
-    if (name.isBlank()) return "Le nom du médicament est obligatoire."
-    if (aisle.isBlank()) return "Sélectionnez un rayon."
-
-    val stockValue = stock.toIntOrNull()
-        ?: return "Le stock doit être un nombre entier."
-    if (stockValue < 0) return "Le stock ne peut pas être négatif."
-
-    return null
-}
+import kotlinx.coroutines.flow.collect
 
 class MedicineDetailActivity : ComponentActivity() {
     private val viewModel: MedicineViewModel by viewModels()
@@ -101,7 +89,16 @@ fun NewMedicineScreen(
     var stock by rememberSaveable { mutableStateOf("0") }
     var validationError by rememberSaveable { mutableStateOf<String?>(null) }
     var isSaving by rememberSaveable { mutableStateOf(false) }
-    val coroutineScope = rememberCoroutineScope()
+
+    LaunchedEffect(viewModel) {
+        viewModel.operationEvents.collect { event ->
+            when (event) {
+                MedicineOperationEvent.Created -> onSaved()
+                MedicineOperationEvent.Failed -> isSaving = false
+                else -> Unit
+            }
+        }
+    }
 
     LaunchedEffect(aisleNames) {
         if (selectedAisle.isBlank()) {
@@ -148,20 +145,17 @@ fun NewMedicineScreen(
             Spacer(modifier = Modifier.height(16.dp))
             Button(
                 onClick = {
-                    validationError = validateMedicineFields(name, selectedAisle, stock)
+                    validationError = viewModel.validateMedicineFields(name, selectedAisle, stock)
                     if (validationError == null) {
                         isSaving = true
-                        coroutineScope.launch {
-                            viewModel.addMedicine(
-                                Medicine(
-                                    name = name.trim(),
-                                    stock = stock.toInt(),
-                                    nameAisle = selectedAisle,
-                                    histories = emptyList()
-                                )
+                        viewModel.addMedicine(
+                            Medicine(
+                                name = name.trim(),
+                                stock = stock.toInt(),
+                                nameAisle = selectedAisle,
+                                histories = emptyList()
                             )
-                            onSaved()
-                        }
+                        )
                     }
                 },
                 enabled = !isSaving,
@@ -193,7 +187,21 @@ fun MedicineDetailScreen(
     var isDeleteDialogVisible by rememberSaveable { mutableStateOf(false) }
     var validationError by rememberSaveable { mutableStateOf<String?>(null) }
     var isSaving by rememberSaveable { mutableStateOf(false) }
-    val coroutineScope = rememberCoroutineScope()
+
+    LaunchedEffect(viewModel) {
+        viewModel.operationEvents.collect { event ->
+            when (event) {
+                MedicineOperationEvent.Updated -> {
+                    currentMedicineName = editedName.trim()
+                    isEditing = false
+                    isSaving = false
+                }
+                MedicineOperationEvent.Deleted -> onDeleted()
+                MedicineOperationEvent.Failed -> isSaving = false
+                else -> Unit
+            }
+        }
+    }
 
     Scaffold { paddingValues ->
         Column(
@@ -275,26 +283,21 @@ fun MedicineDetailScreen(
             Button(
                 onClick = {
                     if (isEditing) {
-                        validationError = validateMedicineFields(
+                        validationError = viewModel.validateMedicineFields(
                             editedName,
                             editedAisle,
                             editedStock
                         )
                         if (validationError == null) {
                             isSaving = true
-                            coroutineScope.launch {
-                                viewModel.updateMedicine(
-                                    medicine.name,
-                                    medicine.copy(
-                                        name = editedName.trim(),
-                                        nameAisle = editedAisle,
-                                        stock = editedStock.toInt()
-                                    )
+                            viewModel.updateMedicine(
+                                medicine.name,
+                                medicine.copy(
+                                    name = editedName.trim(),
+                                    nameAisle = editedAisle,
+                                    stock = editedStock.toInt()
                                 )
-                                currentMedicineName = editedName.trim()
-                                isEditing = false
-                                isSaving = false
-                            }
+                            )
                         }
                     } else {
                         editedName = medicine.name
@@ -332,10 +335,7 @@ fun MedicineDetailScreen(
                         TextButton(
                             onClick = {
                                 isSaving = true
-                                coroutineScope.launch {
-                                    viewModel.deleteMedicine(medicine.name)
-                                    onDeleted()
-                                }
+                                viewModel.deleteMedicine(medicine.name)
                             },
                             enabled = !isSaving
                         ) {

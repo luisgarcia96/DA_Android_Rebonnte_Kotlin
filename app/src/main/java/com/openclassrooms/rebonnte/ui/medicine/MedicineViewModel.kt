@@ -11,8 +11,11 @@ import com.google.firebase.firestore.Query
 import com.openclassrooms.rebonnte.ui.aisle.Aisle
 import com.openclassrooms.rebonnte.ui.history.History
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Job
@@ -26,6 +29,13 @@ import java.util.Date
 import java.util.Locale
 import java.util.Random
 
+sealed interface MedicineOperationEvent {
+    data object Created : MedicineOperationEvent
+    data object Updated : MedicineOperationEvent
+    data object Deleted : MedicineOperationEvent
+    data object Failed : MedicineOperationEvent
+}
+
 class MedicineViewModel(application: Application) : AndroidViewModel(application) {
     private val preferences = application.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
     private val firestore = FirebaseFirestore.getInstance()
@@ -35,6 +45,8 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
     private var allMedicines: List<Medicine> = emptyList()
     private val _medicines = MutableStateFlow<List<Medicine>>(emptyList())
     val medicines: StateFlow<List<Medicine>> = _medicines.asStateFlow()
+    private val _operationEvents = MutableSharedFlow<MedicineOperationEvent>()
+    val operationEvents: SharedFlow<MedicineOperationEvent> = _operationEvents.asSharedFlow()
     private var searchQuery = ""
     private var sortOrder = SortOrder.NONE
     private var searchJob: Job? = null
@@ -61,15 +73,23 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    suspend fun addMedicine(medicine: Medicine) {
-        val medicineWithHistory = medicine.copy(
-            histories = medicine.histories + createHistory(
-                medicine.name,
-                "Medicine created",
-                "Aisle: ${medicine.nameAisle}; initial stock: ${medicine.stock}"
+    fun addMedicine(medicine: Medicine) {
+        viewModelScope.launch {
+            val medicineWithHistory = medicine.copy(
+                histories = medicine.histories + createHistory(
+                    medicine.name,
+                    "Medicine created",
+                    "Aisle: ${medicine.nameAisle}; initial stock: ${medicine.stock}"
+                )
             )
-        )
-        saveNewMedicine(medicineWithHistory)
+            _operationEvents.emit(
+                if (saveNewMedicine(medicineWithHistory)) {
+                    MedicineOperationEvent.Created
+                } else {
+                    MedicineOperationEvent.Failed
+                }
+            )
+        }
     }
 
     fun addTestMedicines(aisleNames: List<String>) {
@@ -133,53 +153,86 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    suspend fun updateMedicine(originalName: String, updatedMedicine: Medicine) {
-        val medicineIndex = allMedicines.indexOfFirst { it.name == originalName }
-        if (medicineIndex == -1) return
-
-        val originalMedicine = allMedicines[medicineIndex]
-        val medicineWithHistory = updatedMedicine.copy(
-            id = originalMedicine.id,
-            histories = originalMedicine.histories + createHistory(
-                updatedMedicine.name,
-                "Medicine updated",
-                getUpdateDetails(originalMedicine, updatedMedicine)
-            )
-        )
-
-        runCatching {
-            saveMedicine(medicineWithHistory)
-        }.onSuccess {
-            allMedicines = allMedicines.toMutableList().apply {
-                set(medicineIndex, medicineWithHistory)
+    fun updateMedicine(originalName: String, updatedMedicine: Medicine) {
+        viewModelScope.launch {
+            val medicineIndex = allMedicines.indexOfFirst { it.name == originalName }
+            if (medicineIndex == -1) {
+                _operationEvents.emit(MedicineOperationEvent.Failed)
+                return@launch
             }
-            publishVisibleMedicines()
-        }.onFailure {
-            showError("Impossible de modifier le médicament.")
+
+            val originalMedicine = allMedicines[medicineIndex]
+            val medicineWithHistory = updatedMedicine.copy(
+                id = originalMedicine.id,
+                histories = originalMedicine.histories + createHistory(
+                    updatedMedicine.name,
+                    "Medicine updated",
+                    getUpdateDetails(originalMedicine, updatedMedicine)
+                )
+            )
+
+            val operationEvent = runCatching {
+                saveMedicine(medicineWithHistory)
+            }.fold(
+                onSuccess = {
+                    allMedicines = allMedicines.toMutableList().apply {
+                        set(medicineIndex, medicineWithHistory)
+                    }
+                    publishVisibleMedicines()
+                    MedicineOperationEvent.Updated
+                },
+                onFailure = {
+                    showError("Impossible de modifier le médicament.")
+                    MedicineOperationEvent.Failed
+                }
+            )
+            _operationEvents.emit(operationEvent)
         }
     }
 
-    suspend fun deleteMedicine(medicineName: String) {
-        val deletedMedicine = allMedicines.find { it.name == medicineName } ?: return
-        val deletionHistory = createHistory(
-            deletedMedicine.name,
-            "Medicine deleted",
-            "Aisle: ${deletedMedicine.nameAisle}; final stock: ${deletedMedicine.stock}"
-        )
-
-        runCatching {
-            withContext(Dispatchers.IO) {
-                val batch = firestore.batch()
-                batch.delete(medicinesCollection.document(deletedMedicine.id))
-                batch.set(deletedHistoriesCollection.document(), deletionHistory.toDocument())
-                batch.commit().await()
+    fun deleteMedicine(medicineName: String) {
+        viewModelScope.launch {
+            val deletedMedicine = allMedicines.find { it.name == medicineName }
+            if (deletedMedicine == null) {
+                _operationEvents.emit(MedicineOperationEvent.Failed)
+                return@launch
             }
-        }.onSuccess {
-            allMedicines = allMedicines.filterNot { it.id == deletedMedicine.id }
-            publishVisibleMedicines()
-        }.onFailure {
-            showError("Impossible de supprimer le médicament.")
+
+            val deletionHistory = createHistory(
+                deletedMedicine.name,
+                "Medicine deleted",
+                "Aisle: ${deletedMedicine.nameAisle}; final stock: ${deletedMedicine.stock}"
+            )
+
+            val operationEvent = runCatching {
+                withContext(Dispatchers.IO) {
+                    val batch = firestore.batch()
+                    batch.delete(medicinesCollection.document(deletedMedicine.id))
+                    batch.set(deletedHistoriesCollection.document(), deletionHistory.toDocument())
+                    batch.commit().await()
+                }
+            }.fold(
+                onSuccess = {
+                    allMedicines = allMedicines.filterNot { it.id == deletedMedicine.id }
+                    publishVisibleMedicines()
+                    MedicineOperationEvent.Deleted
+                },
+                onFailure = {
+                    showError("Impossible de supprimer le médicament.")
+                    MedicineOperationEvent.Failed
+                }
+            )
+            _operationEvents.emit(operationEvent)
         }
+    }
+
+    fun validateMedicineFields(name: String, aisle: String, stock: String): String? {
+        if (name.isBlank()) return "Le nom du médicament est obligatoire."
+        if (aisle.isBlank()) return "Sélectionnez un rayon."
+
+        val stockValue = stock.toIntOrNull()
+            ?: return "Le stock doit être un nombre entier."
+        return if (stockValue < 0) "Le stock ne peut pas être négatif." else null
     }
 
     fun clearError() {
@@ -270,16 +323,14 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    private suspend fun saveNewMedicine(medicine: Medicine) {
-        runCatching {
+    private suspend fun saveNewMedicine(medicine: Medicine): Boolean = runCatching {
             saveMedicine(medicine)
         }.onSuccess {
             allMedicines = allMedicines + medicine
             publishVisibleMedicines()
         }.onFailure {
             showError("Impossible d'enregistrer le médicament.")
-        }
-    }
+        }.isSuccess
 
     private suspend fun saveMedicine(medicine: Medicine) {
         withContext(Dispatchers.IO) {
