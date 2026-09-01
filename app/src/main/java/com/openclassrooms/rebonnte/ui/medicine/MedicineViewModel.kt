@@ -10,6 +10,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.openclassrooms.rebonnte.ui.aisle.Aisle
 import com.openclassrooms.rebonnte.ui.history.History
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -17,6 +18,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.text.SimpleDateFormat
@@ -95,11 +97,13 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
             }
 
             runCatching {
-                val batch = firestore.batch()
-                testMedicines.forEach { medicine ->
-                    batch.set(medicinesCollection.document(medicine.id), medicine.toDocument())
+                withContext(Dispatchers.IO) {
+                    val batch = firestore.batch()
+                    testMedicines.forEach { medicine ->
+                        batch.set(medicinesCollection.document(medicine.id), medicine.toDocument())
+                    }
+                    batch.commit().await()
                 }
-                batch.commit().await()
             }.onSuccess {
                 allMedicines = allMedicines + testMedicines
                 publishVisibleMedicines()
@@ -112,11 +116,13 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
     fun clearAllMedicines() {
         viewModelScope.launch {
             runCatching {
-                val batch = firestore.batch()
-                medicinesCollection.get().await().documents.forEach { document ->
-                    batch.delete(document.reference)
+                withContext(Dispatchers.IO) {
+                    val batch = firestore.batch()
+                    medicinesCollection.get().await().documents.forEach { document ->
+                        batch.delete(document.reference)
+                    }
+                    batch.commit().await()
                 }
-                batch.commit().await()
             }.onSuccess {
                 allMedicines = emptyList()
                 publishVisibleMedicines()
@@ -162,10 +168,12 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
         )
 
         runCatching {
-            val batch = firestore.batch()
-            batch.delete(medicinesCollection.document(deletedMedicine.id))
-            batch.set(deletedHistoriesCollection.document(), deletionHistory.toDocument())
-            batch.commit().await()
+            withContext(Dispatchers.IO) {
+                val batch = firestore.batch()
+                batch.delete(medicinesCollection.document(deletedMedicine.id))
+                batch.set(deletedHistoriesCollection.document(), deletionHistory.toDocument())
+                batch.commit().await()
+            }
         }.onSuccess {
             allMedicines = allMedicines.filterNot { it.id == deletedMedicine.id }
             publishVisibleMedicines()
@@ -239,17 +247,19 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
 
         viewModelScope.launch {
             runCatching {
-                ensureSearchFields()
-                val remoteMedicines = medicineQuery().get().await().documents.mapNotNull { document ->
-                    document.toMedicine()
-                }
-                when {
-                    remoteMedicines.isNotEmpty() -> {
-                        preferences.edit().putBoolean(MIGRATION_COMPLETE_KEY, true).apply()
-                        remoteMedicines
+                withContext(Dispatchers.IO) {
+                    ensureSearchFields()
+                    val remoteMedicines = medicineQuery().get().await().documents.mapNotNull { document ->
+                        document.toMedicine()
                     }
-                    preferences.getBoolean(MIGRATION_COMPLETE_KEY, false) -> emptyList()
-                    else -> migrateLegacyMedicines()
+                    when {
+                        remoteMedicines.isNotEmpty() -> {
+                            preferences.edit().putBoolean(MIGRATION_COMPLETE_KEY, true).apply()
+                            remoteMedicines
+                        }
+                        preferences.getBoolean(MIGRATION_COMPLETE_KEY, false) -> emptyList()
+                        else -> migrateLegacyMedicines()
+                    }
                 }
             }.onSuccess { loadedMedicines ->
                 allMedicines = loadedMedicines
@@ -272,7 +282,9 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
     }
 
     private suspend fun saveMedicine(medicine: Medicine) {
-        medicinesCollection.document(medicine.id).set(medicine.toDocument()).await()
+        withContext(Dispatchers.IO) {
+            medicinesCollection.document(medicine.id).set(medicine.toDocument()).await()
+        }
     }
 
     private suspend fun migrateLegacyMedicines(): List<Medicine> {
