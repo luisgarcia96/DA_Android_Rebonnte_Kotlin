@@ -25,6 +25,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
@@ -65,7 +66,9 @@ fun AuthScreen(
                 email = it
                 onErrorShown()
             },
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("auth_email"),
             label = { Text("Adresse e-mail") },
             singleLine = true,
             enabled = !isSubmitting
@@ -77,7 +80,9 @@ fun AuthScreen(
                 password = it
                 onErrorShown()
             },
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("auth_password"),
             label = { Text("Mot de passe") },
             singleLine = true,
             enabled = !isSubmitting,
@@ -111,7 +116,9 @@ fun AuthScreen(
             onClick = {
                 if (isCreatingAccount) onCreateAccount(email, password) else onSignIn(email, password)
             },
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("auth_submit"),
             enabled = !isSubmitting
         ) {
             if (isSubmitting) {

@@ -38,6 +38,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.openclassrooms.rebonnte.ui.history.History
@@ -121,7 +122,9 @@ fun NewMedicineScreen(
                     validationError = null
                 },
                 label = { Text("Name") },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("new_medicine_name")
             )
             Spacer(modifier = Modifier.height(8.dp))
             AisleSelector(
@@ -140,7 +143,9 @@ fun NewMedicineScreen(
                     validationError = null
                 },
                 label = { Text("Stock") },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("new_medicine_stock")
             )
             Spacer(modifier = Modifier.height(16.dp))
             Button(
@@ -159,7 +164,9 @@ fun NewMedicineScreen(
                     }
                 },
                 enabled = !isSaving,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("new_medicine_save")
             ) {
                 LoadingButtonContent(label = "Save", isLoading = isSaving)
             }
