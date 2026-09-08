@@ -55,14 +55,14 @@ jobs:
           test -n "$SONAR_ORGANIZATION" || { echo "::error::Missing SONAR_ORGANIZATION repository secret."; exit 1; }
           test -n "$SONAR_PROJECT_KEY" || { echo "::error::Missing SONAR_PROJECT_KEY repository secret."; exit 1; }
 
-      - name: Validate Android code and SonarQube Quality Gate
+      - name: Validate Android code
+        run: ./gradlew testDebugUnitTest lintDebug assembleDebug --no-daemon --stacktrace
+
+      - name: Analyze with SonarQube Cloud
+        uses: SonarSource/sonarqube-scan-action@v7
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_ORGANIZATION: ${{ secrets.SONAR_ORGANIZATION }}
-          SONAR_PROJECT_KEY: ${{ secrets.SONAR_PROJECT_KEY }}
-        run: >
-          ./gradlew testDebugUnitTest lintDebug assembleDebug sonar --no-daemon --stacktrace
-          -Dsonar.organization="$SONAR_ORGANIZATION"
-          -Dsonar.projectKey="$SONAR_PROJECT_KEY"
-          -Dsonar.host.url=https://sonarcloud.io
-          -Dsonar.qualitygate.wait=true
+        with:
+          args: >
+            -Dsonar.organization=${{ secrets.SONAR_ORGANIZATION }}
+            -Dsonar.projectKey=${{ secrets.SONAR_PROJECT_KEY }}
