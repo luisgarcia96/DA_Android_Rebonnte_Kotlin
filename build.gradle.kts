@@ -3,5 +3,5 @@ plugins {
     alias(libs.plugins.android.application) apply false
     alias(libs.plugins.jetbrains.kotlin.android) apply false
     alias(libs.plugins.google.services) apply false
-    id("org.sonarqube") version "7.4.0.8496"
+    id("org.sonarqube") version "5.1.0.4882"
 }
