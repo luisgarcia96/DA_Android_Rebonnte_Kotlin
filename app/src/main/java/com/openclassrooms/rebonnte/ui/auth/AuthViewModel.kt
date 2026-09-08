@@ -1,6 +1,5 @@
 package com.openclassrooms.rebonnte.ui.auth
 
-import android.util.Patterns
 import androidx.lifecycle.ViewModel
 import com.google.android.gms.tasks.Task
 import com.google.firebase.auth.FirebaseAuth
@@ -53,14 +52,15 @@ class AuthViewModel : ViewModel() {
         password: String,
         request: (String, String) -> Task<*>
     ) {
-        val validationError = validateCredentials(email, password)
+        val validationError = AuthCredentialsValidator.validate(email, password)
         if (validationError != null) {
             _uiState.value = _uiState.value.copy(errorMessage = validationError)
             return
         }
 
         _uiState.value = _uiState.value.copy(isSubmitting = true, errorMessage = null)
-        request(email.trim(), password).addOnCompleteListener { task ->
+        val credentials = AuthCredentialsValidator.normalized(email, password)
+        request(credentials.email, credentials.password).addOnCompleteListener { task ->
             _uiState.value = if (task.isSuccessful) {
                 AuthUiState(
                     isAuthenticated = true,
@@ -74,16 +74,4 @@ class AuthViewModel : ViewModel() {
         }
     }
 
-    private fun validateCredentials(email: String, password: String): String? = when {
-        email.trim().isEmpty() -> "Saisissez votre adresse e-mail."
-        !Patterns.EMAIL_ADDRESS.matcher(email.trim()).matches() ->
-            "Saisissez une adresse e-mail valide."
-        password.length < MINIMUM_PASSWORD_LENGTH ->
-            "Le mot de passe doit contenir au moins $MINIMUM_PASSWORD_LENGTH caracteres."
-        else -> null
-    }
-
-    private companion object {
-        const val MINIMUM_PASSWORD_LENGTH = 6
-    }
 }

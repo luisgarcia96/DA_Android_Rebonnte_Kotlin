@@ -10,6 +10,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.openclassrooms.rebonnte.ui.aisle.Aisle
 import com.openclassrooms.rebonnte.ui.history.History
+import com.openclassrooms.rebonnte.ui.history.HistoryRules
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -46,7 +47,7 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
     private val _operationEvents = MutableSharedFlow<MedicineOperationEvent>()
     val operationEvents: SharedFlow<MedicineOperationEvent> = _operationEvents.asSharedFlow()
     private var searchQuery = ""
-    private var sortOrder = SortOrder.NONE
+    private var sortOrder = MedicineSortOrder.NONE
     private var hasLoaded = false
     private var isLoading = false
 
@@ -239,17 +240,17 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun sortByNone() {
-        sortOrder = SortOrder.NONE
+        sortOrder = MedicineSortOrder.NONE
         publishVisibleMedicines()
     }
 
     fun sortByName() {
-        sortOrder = SortOrder.NAME
+        sortOrder = MedicineSortOrder.NAME
         publishVisibleMedicines()
     }
 
     fun sortByStock() {
-        sortOrder = SortOrder.STOCK
+        sortOrder = MedicineSortOrder.STOCK
         publishVisibleMedicines()
     }
 
@@ -348,15 +349,7 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
     }
 
     private fun publishVisibleMedicines() {
-        val normalizedQuery = searchQuery.normalizeForSearch()
-        val filteredMedicines = allMedicines.filter { medicine ->
-            normalizedQuery.isBlank() || medicine.name.normalizeForSearch().contains(normalizedQuery)
-        }
-        _medicines.value = when (sortOrder) {
-            SortOrder.NONE -> filteredMedicines
-            SortOrder.NAME -> filteredMedicines.sortedBy { it.name.lowercase(Locale.ROOT) }
-            SortOrder.STOCK -> filteredMedicines.sortedBy { it.stock }
-        }
+        _medicines.value = MedicineCatalog.visibleMedicines(allMedicines, searchQuery, sortOrder)
     }
 
     private suspend fun ensureSearchFields() {
@@ -373,7 +366,7 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
         documents.forEach { document ->
             document.getString(NAME_FIELD)?.let { name ->
                 if (!normalizedNamesComplete && document.getString(NORMALIZED_NAME_FIELD) == null) {
-                    batch.update(document.reference, NORMALIZED_NAME_FIELD, name.normalizeForSearch())
+                    batch.update(document.reference, NORMALIZED_NAME_FIELD, MedicineRules.normalizeName(name))
                 }
                 if (
                     !searchSubstringsComplete ||
@@ -426,7 +419,7 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
 
     private fun Medicine.toDocument() = mapOf(
         NAME_FIELD to name,
-        NORMALIZED_NAME_FIELD to name.normalizeForSearch(),
+        NORMALIZED_NAME_FIELD to MedicineRules.normalizeName(name),
         SEARCH_TOKENS_FIELD to MedicineRules.searchTokens(name),
         STOCK_FIELD to stock,
         AISLE_FIELD to nameAisle,
@@ -467,25 +460,15 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
             userId = historyObject.getString(HISTORY_USER_ID_FIELD),
             date = historyObject.getString(HISTORY_DATE_FIELD),
             action = historyObject.optString(HISTORY_ACTION_FIELD).ifBlank {
-                inferAction(historyObject.getString(HISTORY_DETAILS_FIELD))
+                HistoryRules.inferredAction(historyObject.getString(HISTORY_DETAILS_FIELD))
             },
             details = historyObject.getString(HISTORY_DETAILS_FIELD)
         )
     }
 
-    private fun inferAction(details: String): String = when {
-        details.startsWith("Stock") -> "Stock variation"
-        details.startsWith("Medicine created") -> "Medicine created"
-        details.startsWith("Medicine updated") -> "Medicine updated"
-        details.startsWith("Medicine deleted") -> "Medicine deleted"
-        else -> "Recorded action"
-    }
-
     private fun showError(message: String) {
         _errorMessage.value = message
     }
-
-    private fun String.normalizeForSearch() = MedicineRules.normalizeName(this)
 
     private val medicinesCollection
         get() = firestore.collection(MEDICINES_COLLECTION)
@@ -518,9 +501,4 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
         const val SEARCH_TOKENS_MIGRATION_COMPLETE_KEY = "firestore_medicines_search_tokens_migration_complete"
     }
 
-    private enum class SortOrder {
-        NONE,
-        NAME,
-        STOCK
-    }
 }

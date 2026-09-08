@@ -12,7 +12,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import org.json.JSONArray
-import java.util.Locale
 
 class AisleViewModel(application: Application) : AndroidViewModel(application) {
     private val preferences = application.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
@@ -131,10 +130,7 @@ class AisleViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun publishVisibleAisles() {
-        val normalizedQuery = searchQuery.lowercase(Locale.ROOT)
-        _aisles.value = allAisles
-            .filter { aisle -> aisle.name.lowercase(Locale.ROOT).contains(normalizedQuery) }
-            .sortedBy { it.name }
+        _aisles.value = AisleCatalog.visibleAisles(allAisles, searchQuery)
     }
 
     private suspend fun migrateLegacyAisles(): List<Aisle> {
