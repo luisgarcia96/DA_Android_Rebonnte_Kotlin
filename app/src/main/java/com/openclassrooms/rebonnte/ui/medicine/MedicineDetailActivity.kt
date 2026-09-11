@@ -1,8 +1,10 @@
 package com.openclassrooms.rebonnte.ui.medicine
 
 import android.os.Bundle
+import android.util.Patterns
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -17,47 +19,196 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.ViewModelProvider
-import com.openclassrooms.rebonnte.MainActivity
 import com.openclassrooms.rebonnte.ui.history.History
+import com.openclassrooms.rebonnte.ui.aisle.AisleViewModel
+import com.openclassrooms.rebonnte.ui.components.AisleSelector
 import com.openclassrooms.rebonnte.ui.theme.RebonnteTheme
-import java.util.Date
+import kotlinx.coroutines.flow.collect
 
 class MedicineDetailActivity : ComponentActivity() {
+    private val viewModel: MedicineViewModel by viewModels()
+    private val aisleViewModel: AisleViewModel by viewModels()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val name = intent.getStringExtra("nameMedicine") ?: "Unknown"
-        val viewModel = ViewModelProvider(MainActivity.mainActivity)[MedicineViewModel::class.java]
+        val isNewMedicine = intent.getBooleanExtra("isNewMedicine", false)
 
         setContent {
+            val aisleNames by aisleViewModel.aisles.collectAsState(initial = emptyList())
+
             RebonnteTheme {
-                MedicineDetailScreen(name, viewModel)
+                if (isNewMedicine) {
+                    NewMedicineScreen(
+                        aisleNames = aisleNames.map { it.name },
+                        viewModel = viewModel,
+                        onSaved = ::finish
+                    )
+                } else {
+                    MedicineDetailScreen(
+                        name = name,
+                        aisleNames = aisleNames.map { it.name },
+                        viewModel = viewModel,
+                        onDeleted = ::finish
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-fun MedicineDetailScreen(name: String, viewModel: MedicineViewModel) {
+fun NewMedicineScreen(
+    aisleNames: List<String>,
+    viewModel: MedicineViewModel,
+    onSaved: () -> Unit
+) {
+    var name by rememberSaveable { mutableStateOf("") }
+    var selectedAisle by rememberSaveable { mutableStateOf(aisleNames.firstOrNull().orEmpty()) }
+    var stock by rememberSaveable { mutableStateOf("0") }
+    var validationError by rememberSaveable { mutableStateOf<String?>(null) }
+    var isSaving by rememberSaveable { mutableStateOf(false) }
+
+    LaunchedEffect(viewModel) {
+        viewModel.operationEvents.collect { event ->
+            when (event) {
+                MedicineOperationEvent.Created -> onSaved()
+                MedicineOperationEvent.Failed -> isSaving = false
+                else -> Unit
+            }
+        }
+    }
+
+    LaunchedEffect(aisleNames) {
+        if (selectedAisle.isBlank()) {
+            selectedAisle = aisleNames.firstOrNull().orEmpty()
+        }
+    }
+
+    Scaffold { paddingValues ->
+        Column(
+            modifier = Modifier
+                .padding(paddingValues)
+                .padding(16.dp)
+        ) {
+            Text(text = "New medicine", style = MaterialTheme.typography.headlineSmall)
+            Spacer(modifier = Modifier.height(16.dp))
+            TextField(
+                value = name,
+                onValueChange = {
+                    name = it
+                    validationError = null
+                },
+                label = { Text("Name") },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("new_medicine_name")
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            AisleSelector(
+                aisleNames = aisleNames,
+                selectedAisle = selectedAisle,
+                onAisleSelected = { aisleName ->
+                    selectedAisle = aisleName
+                    validationError = null
+                }
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            TextField(
+                value = stock,
+                onValueChange = {
+                    stock = it
+                    validationError = null
+                },
+                label = { Text("Stock") },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("new_medicine_stock")
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Button(
+                onClick = {
+                    validationError = viewModel.validateMedicineFields(name, selectedAisle, stock)
+                    if (validationError == null) {
+                        isSaving = true
+                        viewModel.addMedicine(
+                            Medicine(
+                                name = name.trim(),
+                                stock = stock.toInt(),
+                                nameAisle = selectedAisle,
+                                histories = emptyList()
+                            )
+                        )
+                    }
+                },
+                enabled = !isSaving,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("new_medicine_save")
+            ) {
+                LoadingButtonContent(label = "Save", isLoading = isSaving)
+            }
+            validationError?.let { message ->
+                Text(text = message, color = MaterialTheme.colorScheme.error)
+            }
+        }
+    }
+}
+
+@Composable
+fun MedicineDetailScreen(
+    name: String,
+    aisleNames: List<String>,
+    viewModel: MedicineViewModel,
+    onDeleted: () -> Unit
+) {
     val medicines by viewModel.medicines.collectAsState(initial = emptyList())
-    val medicine = medicines.find { it.name == name } ?: return
-    var stock by remember { mutableStateOf(medicine.stock) }
+    var currentMedicineName by rememberSaveable { mutableStateOf(name) }
+    var isEditing by rememberSaveable { mutableStateOf(false) }
+    val medicine = medicines.find { it.name == currentMedicineName } ?: return
+    var editedName by rememberSaveable { mutableStateOf(medicine.name) }
+    var editedAisle by rememberSaveable { mutableStateOf(medicine.nameAisle) }
+    var editedStock by rememberSaveable { mutableStateOf(medicine.stock.toString()) }
+    var isDeleteDialogVisible by rememberSaveable { mutableStateOf(false) }
+    var validationError by rememberSaveable { mutableStateOf<String?>(null) }
+    var isSaving by rememberSaveable { mutableStateOf(false) }
+
+    LaunchedEffect(viewModel) {
+        viewModel.operationEvents.collect { event ->
+            when (event) {
+                MedicineOperationEvent.Updated -> {
+                    currentMedicineName = editedName.trim()
+                    isEditing = false
+                    isSaving = false
+                }
+                MedicineOperationEvent.Deleted -> onDeleted()
+                MedicineOperationEvent.Failed -> isSaving = false
+                else -> Unit
+            }
+        }
+    }
 
     Scaffold { paddingValues ->
         Column(
@@ -66,66 +217,147 @@ fun MedicineDetailScreen(name: String, viewModel: MedicineViewModel) {
                 .padding(16.dp)
         ) {
             TextField(
-                value = medicine.name,
-                onValueChange = {},
+                value = if (isEditing) editedName else medicine.name,
+                onValueChange = {
+                    editedName = it
+                    validationError = null
+                },
                 label = { Text("Name") },
-                enabled = false,
+                enabled = isEditing,
                 modifier = Modifier.fillMaxWidth()
             )
             Spacer(modifier = Modifier.height(8.dp))
-            TextField(
-                value = medicine.nameAisle,
-                onValueChange = {},
-                label = { Text("Aisle") },
-                enabled = false,
-                modifier = Modifier.fillMaxWidth()
-            )
+            if (isEditing) {
+                AisleSelector(
+                    aisleNames = aisleNames,
+                    selectedAisle = editedAisle,
+                    onAisleSelected = { aisleName ->
+                        editedAisle = aisleName
+                        validationError = null
+                    }
+                )
+            } else {
+                TextField(
+                    value = medicine.nameAisle,
+                    onValueChange = {},
+                    label = { Text("Aisle") },
+                    enabled = false,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
             Spacer(modifier = Modifier.height(8.dp))
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
+            if (isEditing) {
+                TextField(
+                    value = editedStock,
+                    onValueChange = {
+                        editedStock = it
+                        validationError = null
+                    },
+                    label = { Text("Stock") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            } else {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    IconButton(onClick = {
+                        viewModel.updateStock(medicine.name, -1)
+                    }) {
+                        Icon(
+                            imageVector = Icons.Filled.KeyboardArrowDown,
+                            contentDescription = "Decrease stock by one"
+                        )
+                    }
+                    TextField(
+                        value = medicine.stock.toString(),
+                        onValueChange = {},
+                        label = { Text("Stock") },
+                        enabled = false,
+                        modifier = Modifier.weight(1f)
+                    )
+                    IconButton(onClick = {
+                        viewModel.updateStock(medicine.name, 1)
+                    }) {
+                        Icon(
+                            imageVector = Icons.Default.KeyboardArrowUp,
+                            contentDescription = "Increase stock by one"
+                        )
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+            Button(
+                onClick = {
+                    if (isEditing) {
+                        validationError = viewModel.validateMedicineFields(
+                            editedName,
+                            editedAisle,
+                            editedStock
+                        )
+                        if (validationError == null) {
+                            isSaving = true
+                            viewModel.updateMedicine(
+                                medicine.name,
+                                medicine.copy(
+                                    name = editedName.trim(),
+                                    nameAisle = editedAisle,
+                                    stock = editedStock.toInt()
+                                )
+                            )
+                        }
+                    } else {
+                        editedName = medicine.name
+                        editedAisle = medicine.nameAisle
+                        editedStock = medicine.stock.toString()
+                        validationError = null
+                        isEditing = true
+                    }
+                },
+                enabled = !isSaving,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                IconButton(onClick = {
-                    if (stock > 0) {
-                        medicines[medicines.size].histories.toMutableList().add(
-                            History(
-                                medicine.name,
-                                "efeza56f1e65f",
-                                Date().toString(),
-                                "Updated medicine details"
-                            )
-                        )
-                        stock--
-                    }
-                }) {
-                    Icon(
-                        imageVector = Icons.Filled.KeyboardArrowDown,
-                        contentDescription = "Minus One"
-                    )
-                }
-                TextField(
-                    value = stock.toString(),
-                    onValueChange = {},
-                    label = { Text("Stock") },
-                    enabled = false,
-                    modifier = Modifier.weight(1f)
+                LoadingButtonContent(
+                    label = if (isEditing) "Save" else "Edit",
+                    isLoading = isSaving
                 )
-                IconButton(onClick = {
-                    medicines[medicines.size].histories.toMutableList().add(
-                        History(
-                            medicine.name,
-                            "efeza56f1e65f",
-                            Date().toString(),
-                            "Updated medicine details"
-                        )
-                    )
-                    stock++
-                }) {
-                    Icon(
-                        imageVector = Icons.Default.KeyboardArrowUp,
-                        contentDescription = "Plus One"
-                    )
-                }
+            }
+            validationError?.let { message ->
+                Text(text = message, color = MaterialTheme.colorScheme.error)
+            }
+            TextButton(
+                onClick = { isDeleteDialogVisible = true },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Delete")
+            }
+            if (isDeleteDialogVisible) {
+                AlertDialog(
+                    onDismissRequest = {
+                        if (!isSaving) isDeleteDialogVisible = false
+                    },
+                    title = { Text("Delete medicine") },
+                    text = { Text("Are you sure you want to delete ${medicine.name}?") },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                isSaving = true
+                                viewModel.deleteMedicine(medicine.name)
+                            },
+                            enabled = !isSaving
+                        ) {
+                            LoadingButtonContent(label = "Delete", isLoading = isSaving)
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(
+                            onClick = { isDeleteDialogVisible = false },
+                            enabled = !isSaving
+                        ) {
+                            Text("Cancel")
+                        }
+                    }
+                )
             }
             Spacer(modifier = Modifier.height(16.dp))
             Text(text = "History", style = MaterialTheme.typography.titleLarge)
@@ -140,7 +372,23 @@ fun MedicineDetailScreen(name: String, viewModel: MedicineViewModel) {
 }
 
 @Composable
+private fun LoadingButtonContent(label: String, isLoading: Boolean) {
+    if (isLoading) {
+        CircularProgressIndicator(
+            modifier = Modifier.height(20.dp),
+            strokeWidth = 2.dp
+        )
+    } else {
+        Text(label)
+    }
+}
+
+@Composable
 fun HistoryItem(history: History) {
+    val operatorEmail = history.userId.takeIf { userId ->
+        Patterns.EMAIL_ADDRESS.matcher(userId).matches()
+    } ?: "Email unavailable"
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -149,7 +397,8 @@ fun HistoryItem(history: History) {
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(text = history.medicineName, fontWeight = FontWeight.Bold)
-            Text(text = "User: ${history.userId}")
+            Text(text = "Action: ${history.action}")
+            Text(text = "Operator: $operatorEmail")
             Text(text = "Date: ${history.date}")
             Text(text = "Details: ${history.details}")
         }

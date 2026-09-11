@@ -1,27 +1,23 @@
 package com.openclassrooms.rebonnte
 
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.runtime.Composable
-import android.content.BroadcastReceiver
-import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
-import android.os.Build
 import android.os.Bundle
-import android.os.Handler
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.FastOutLinearInEasing
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
+import androidx.activity.viewModels
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -31,10 +27,11 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Search
@@ -45,194 +42,321 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarColors
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.openclassrooms.rebonnte.ui.aisle.AisleScreen
 import com.openclassrooms.rebonnte.ui.aisle.AisleViewModel
+import com.openclassrooms.rebonnte.ui.auth.AuthScreen
+import com.openclassrooms.rebonnte.ui.auth.AuthViewModel
 import com.openclassrooms.rebonnte.ui.medicine.MedicineScreen
+import com.openclassrooms.rebonnte.ui.medicine.MedicineDetailActivity
 import com.openclassrooms.rebonnte.ui.medicine.MedicineViewModel
 import com.openclassrooms.rebonnte.ui.theme.RebonnteTheme
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.filterNotNull
 
 class MainActivity : ComponentActivity() {
-
-    private lateinit var myBroadcastReceiver: MyBroadcastReceiver
+    private val medicineViewModel: MedicineViewModel by viewModels()
+    private val aisleViewModel: AisleViewModel by viewModels()
+    private val authViewModel: AuthViewModel by viewModels()
+    private var hasResumed = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        mainActivity = this
         setContent {
-            MyApp()
-        }
-        startBroadcastReceiver()
-    }
-
-    private fun startMyBroadcast() {
-        val intent = Intent("com.rebonnte.ACTION_UPDATE")
-        sendBroadcast(intent)
-        startBroadcastReceiver()
-    }
-
-    private fun startBroadcastReceiver() {
-        myBroadcastReceiver = MyBroadcastReceiver()
-        val filter = IntentFilter().apply {
-            addAction("com.rebonnte.ACTION_UPDATE")
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(myBroadcastReceiver, filter, RECEIVER_NOT_EXPORTED)
-        } else {
-            registerReceiver(myBroadcastReceiver, filter)
-        }
-
-        Handler().postDelayed({
-            startMyBroadcast()
-        }, 200)
-    }
-
-
-    class MyBroadcastReceiver : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            Toast.makeText(mainActivity, "Update reçu", Toast.LENGTH_SHORT).show()
+            MyApp(medicineViewModel, aisleViewModel, authViewModel)
         }
     }
 
-    companion object {
-        lateinit var mainActivity: MainActivity
+    override fun onResume() {
+        super.onResume()
+        if (hasResumed) {
+            medicineViewModel.reload(force = true)
+            aisleViewModel.reload(force = true)
+        }
+        hasResumed = true
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MyApp() {
-    val navController = rememberNavController()
-    val medicineViewModel: MedicineViewModel = viewModel()
-    val aisleViewModel: AisleViewModel = viewModel()
-    val navBackStackEntry by navController.currentBackStackEntryAsState()
-    val route = navBackStackEntry?.destination?.route
+fun MyApp(
+    medicineViewModel: MedicineViewModel,
+    aisleViewModel: AisleViewModel,
+    authViewModel: AuthViewModel
+) {
+    val authState by authViewModel.uiState.collectAsState()
+
+    LaunchedEffect(authState.isAuthenticated) {
+        if (authState.isAuthenticated) {
+            medicineViewModel.reload()
+            aisleViewModel.reload()
+        }
+    }
 
     RebonnteTheme {
-        Scaffold(
-            topBar = {
-                var isSearchActive by rememberSaveable { mutableStateOf(false) }
-                var searchQuery by remember { mutableStateOf("") }
+        if (authState.isAuthenticated) {
+            StockApp(
+                medicineViewModel = medicineViewModel,
+                aisleViewModel = aisleViewModel,
+                userEmail = authState.userEmail,
+                onSignOut = authViewModel::signOut
+            )
+        } else {
+            AuthScreen(
+                errorMessage = authState.errorMessage,
+                isSubmitting = authState.isSubmitting,
+                onSignIn = authViewModel::signIn,
+                onCreateAccount = authViewModel::createAccount,
+                onErrorShown = authViewModel::clearError
+            )
+        }
+    }
+}
 
-                Column(verticalArrangement = Arrangement.spacedBy((-1).dp)) {
-                    TopAppBar(
-                        title = { if (route == "aisle") Text(text = "Aisle") else Text(text = "Medicines") },
-                        actions = {
-                            var expanded by remember { mutableStateOf(false) }
-                            if (currentRoute(navController) == "medicine") {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier
-                                        .padding(end = 8.dp)
-                                        .background(MaterialTheme.colorScheme.surface)
-                                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                                ) {
-                                    Box {
-                                        IconButton(onClick = { expanded = true }) {
-                                            Icon(Icons.Default.MoreVert, contentDescription = null)
-                                        }
-                                        DropdownMenu(
-                                            expanded = expanded,
-                                            onDismissRequest = { expanded = false },
-                                            offset = DpOffset(x = 0.dp, y = 0.dp)
-                                        ) {
-                                            DropdownMenuItem(
-                                                onClick = {
-                                                    medicineViewModel.sortByNone()
-                                                    expanded = false
-                                                },
-                                                text = { Text("Sort by None") }
-                                            )
-                                            DropdownMenuItem(
-                                                onClick = {
-                                                    medicineViewModel.sortByName()
-                                                    expanded = false
-                                                },
-                                                text = { Text("Sort by Name") }
-                                            )
-                                            DropdownMenuItem(
-                                                onClick = {
-                                                    medicineViewModel.sortByStock()
-                                                    expanded = false
-                                                },
-                                                text = { Text("Sort by Stock") }
-                                            )
-                                        }
-                                    }
-                                }
-                            }
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun StockApp(
+    medicineViewModel: MedicineViewModel,
+    aisleViewModel: AisleViewModel,
+    userEmail: String?,
+    onSignOut: () -> Unit
+) {
+    val navController = rememberNavController()
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val route = navBackStackEntry?.destination?.route
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(medicineViewModel) {
+        medicineViewModel.errorMessage
+            .filterNotNull()
+            .collectLatest { message ->
+                snackbarHostState.showSnackbar(message)
+                medicineViewModel.clearError()
+            }
+    }
+
+    LaunchedEffect(aisleViewModel) {
+        aisleViewModel.errorMessage
+            .filterNotNull()
+            .collectLatest { message ->
+                snackbarHostState.showSnackbar(message)
+                aisleViewModel.clearError()
+            }
+    }
+
+    Scaffold(
+        topBar = {
+            MainTopBar(route, medicineViewModel, aisleViewModel, userEmail, onSignOut)
+        },
+        bottomBar = { MainBottomBar(route, navController) },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        floatingActionButton = {
+            MainFloatingActionButton(route, aisleViewModel)
+        }
+    ) {
+        NavHost(
+            modifier = Modifier.padding(it),
+            navController = navController,
+            startDestination = "aisle",
+            enterTransition = { fadeIn(animationSpec = tween(90)) },
+            exitTransition = { fadeOut(animationSpec = tween(60)) },
+            popEnterTransition = { fadeIn(animationSpec = tween(90)) },
+            popExitTransition = { fadeOut(animationSpec = tween(60)) }
+        ) {
+            composable("aisle") { AisleScreen(aisleViewModel) }
+            composable("medicine") {
+                MedicineScreen(
+                    medicineViewModel,
+                    onAddTestData = {
+                        aisleViewModel.addTestAisles(5) { aisleNames ->
+                            medicineViewModel.addTestMedicines(aisleNames)
                         }
-                    )
-                    if (currentRoute(navController) == "medicine") {
-                        EmbeddedSearchBar(
-                            query = searchQuery,
-                            onQueryChange = {
-                                medicineViewModel.filterByName(it)
-                                searchQuery = it
-                            },
-                            isSearchActive = isSearchActive,
-                            onActiveChanged = { isSearchActive = it }
+                    },
+                    onClearAllData = {
+                        medicineViewModel.clearAllMedicines()
+                        aisleViewModel.clearAllAisles()
+                    }
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MainTopBar(
+    route: String?,
+    medicineViewModel: MedicineViewModel,
+    aisleViewModel: AisleViewModel,
+    userEmail: String?,
+    onSignOut: () -> Unit
+) {
+    var isMedicineSearchActive by rememberSaveable { mutableStateOf(false) }
+    var medicineSearchQuery by rememberSaveable { mutableStateOf("") }
+    var isAisleSearchActive by rememberSaveable { mutableStateOf(false) }
+    var aisleSearchQuery by rememberSaveable { mutableStateOf("") }
+    var isSortMenuExpanded by remember { mutableStateOf(false) }
+
+    Column(verticalArrangement = Arrangement.spacedBy((-1).dp)) {
+        TopAppBar(
+            title = {
+                Column {
+                    Text(text = if (route == "aisle") "Aisle" else "Medicines")
+                    if (userEmail != null) {
+                        Text(
+                            text = "Connecte : $userEmail",
+                            style = MaterialTheme.typography.labelSmall
                         )
                     }
                 }
-
             },
-            bottomBar = {
-                NavigationBar {
-                    NavigationBarItem(
-                        icon = { Icon(Icons.Default.Home, contentDescription = null) },
-                        label = { Text("Aisle") },
-                        selected = currentRoute(navController) == "aisle",
-                        onClick = { navController.navigate("aisle") }
-                    )
-                    NavigationBarItem(
-                        icon = { Icon(Icons.Default.List, contentDescription = null) },
-                        label = { Text("Medicine") },
-                        selected = currentRoute(navController) == "medicine",
-                        onClick = { navController.navigate("medicine") }
-                    )
-                }
-            },
-            floatingActionButton = {
-                FloatingActionButton(onClick = {
-                    if (route == "medicine") {
-                        medicineViewModel.addRandomMedicine(aisleViewModel.aisles.value)
-                    } else if (route == "aisle") {
-                        aisleViewModel.addRandomAisle()
+            actions = {
+                if (route == "medicine") {
+                    Box(
+                        modifier = Modifier
+                            .padding(end = 8.dp)
+                            .background(MaterialTheme.colorScheme.surface)
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        IconButton(onClick = { isSortMenuExpanded = true }) {
+                            Icon(
+                                imageVector = Icons.Default.MoreVert,
+                                contentDescription = "Sort medicines"
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = isSortMenuExpanded,
+                            onDismissRequest = { isSortMenuExpanded = false },
+                            offset = DpOffset(x = 0.dp, y = 0.dp)
+                        ) {
+                            DropdownMenuItem(
+                                onClick = {
+                                    medicineViewModel.sortByNone()
+                                    isSortMenuExpanded = false
+                                },
+                                text = { Text("Sort by None") }
+                            )
+                            DropdownMenuItem(
+                                onClick = {
+                                    medicineViewModel.sortByName()
+                                    isSortMenuExpanded = false
+                                },
+                                text = { Text("Sort by Name") }
+                            )
+                            DropdownMenuItem(
+                                onClick = {
+                                    medicineViewModel.sortByStock()
+                                    isSortMenuExpanded = false
+                                },
+                                text = { Text("Sort by Stock") }
+                            )
+                        }
                     }
-                }) {
-                    Icon(Icons.Default.Add, contentDescription = "Add")
+                }
+                IconButton(onClick = onSignOut) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.Logout,
+                        contentDescription = "Se deconnecter"
+                    )
                 }
             }
-        ) {
-            NavHost(
-                modifier = Modifier.padding(it),
-                navController = navController,
-                startDestination = "aisle"
-            ) {
-                composable("aisle") { AisleScreen(aisleViewModel) }
-                composable("medicine") { MedicineScreen(medicineViewModel) }
-            }
+        )
+        when (route) {
+            "aisle" -> EmbeddedSearchBar(
+                query = aisleSearchQuery,
+                onQueryChange = {
+                    aisleViewModel.filterByName(it)
+                    aisleSearchQuery = it
+                },
+                isSearchActive = isAisleSearchActive,
+                onActiveChanged = { isAisleSearchActive = it },
+                searchContentDescription = "Search aisles"
+            )
+            "medicine" -> EmbeddedSearchBar(
+                query = medicineSearchQuery,
+                onQueryChange = {
+                    medicineViewModel.filterByName(it)
+                    medicineSearchQuery = it
+                },
+                isSearchActive = isMedicineSearchActive,
+                onActiveChanged = { isMedicineSearchActive = it },
+                searchContentDescription = "Search medicines"
+            )
         }
+    }
+}
+
+@Composable
+private fun MainBottomBar(
+    route: String?,
+    navController: NavController
+) {
+    NavigationBar {
+        NavigationBarItem(
+            icon = { Icon(Icons.Default.Home, contentDescription = null) },
+            label = { Text("Aisle") },
+            selected = route == "aisle",
+            onClick = { navController.navigateToTopLevelDestination("aisle") }
+        )
+        NavigationBarItem(
+            icon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = null) },
+            label = { Text("Medicine") },
+            selected = route == "medicine",
+            onClick = { navController.navigateToTopLevelDestination("medicine") }
+        )
+    }
+}
+
+private fun NavController.navigateToTopLevelDestination(route: String) {
+    navigate(route) {
+        popUpTo(graph.findStartDestination().id) {
+            saveState = true
+        }
+        launchSingleTop = true
+        restoreState = true
+    }
+}
+
+@Composable
+private fun MainFloatingActionButton(
+    route: String?,
+    aisleViewModel: AisleViewModel
+) {
+    val context = LocalContext.current
+
+    val contentDescription = if (route == "medicine") "Add medicine" else "Add aisle"
+
+    FloatingActionButton(onClick = {
+        when (route) {
+            "medicine" -> context.startActivity(
+                Intent(context, MedicineDetailActivity::class.java)
+                    .putExtra("isNewMedicine", true)
+                    .putStringArrayListExtra(
+                        "aisleNames",
+                        ArrayList(aisleViewModel.aisles.value.map { it.name })
+                    )
+            )
+            "aisle" -> aisleViewModel.addRandomAisle()
+        }
+    }) {
+        Icon(imageVector = Icons.Default.Add, contentDescription = contentDescription)
     }
 }
 
@@ -248,11 +372,10 @@ fun EmbeddedSearchBar(
     onQueryChange: (String) -> Unit,
     isSearchActive: Boolean,
     onActiveChanged: (Boolean) -> Unit,
+    searchContentDescription: String,
     modifier: Modifier = Modifier,
 ) {
-    var searchQuery by rememberSaveable { mutableStateOf(query) }
     val activeChanged: (Boolean) -> Unit = { active ->
-        searchQuery = ""
         onQueryChange("")
         onActiveChanged(active)
     }
@@ -273,7 +396,7 @@ fun EmbeddedSearchBar(
             IconButton(onClick = { activeChanged(false) }) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
-                    contentDescription = null,
+                    contentDescription = "Close search",
                     tint = MaterialTheme.colorScheme.primary
                 )
             }
@@ -286,17 +409,15 @@ fun EmbeddedSearchBar(
         }
 
         BasicTextField(
-            value = searchQuery,
-            onValueChange = { query ->
-                searchQuery = query
-                onQueryChange(query)
-            },
+            value = query,
+            onValueChange = onQueryChange,
             modifier = Modifier
                 .weight(1f)
-                .padding(horizontal = 8.dp),
+                .padding(horizontal = 8.dp)
+                .semantics { contentDescription = searchContentDescription },
             singleLine = true,
             decorationBox = { innerTextField ->
-                if (searchQuery.isEmpty()) {
+                if (query.isEmpty()) {
                     Text(
                         text = "Search",
                         style = MaterialTheme.typography.bodyMedium,
@@ -307,14 +428,13 @@ fun EmbeddedSearchBar(
             }
         )
 
-        if (isSearchActive && searchQuery.isNotEmpty()) {
+        if (isSearchActive && query.isNotEmpty()) {
             IconButton(onClick = {
-                searchQuery = ""
                 onQueryChange("")
             }) {
                 Icon(
                     imageVector = Icons.Rounded.Close,
-                    contentDescription = null,
+                    contentDescription = "Clear search",
                     tint = MaterialTheme.colorScheme.primary
                 )
             }
