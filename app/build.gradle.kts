@@ -4,6 +4,18 @@ plugins {
     alias(libs.plugins.google.services)
 }
 
+val releaseStoreFile = providers.gradleProperty("REBONNTE_RELEASE_STORE_FILE").orNull
+val releaseStorePassword = providers.gradleProperty("REBONNTE_RELEASE_STORE_PASSWORD").orNull
+val releaseKeyAlias = providers.gradleProperty("REBONNTE_RELEASE_KEY_ALIAS").orNull
+val releaseKeyPassword = providers.gradleProperty("REBONNTE_RELEASE_KEY_PASSWORD").orNull
+val releaseVersionCode = providers.gradleProperty("REBONNTE_RELEASE_VERSION_CODE").orNull?.toIntOrNull()
+val isReleaseSigningConfigured = listOf(
+    releaseStoreFile,
+    releaseStorePassword,
+    releaseKeyAlias,
+    releaseKeyPassword
+).all { !it.isNullOrBlank() }
+
 android {
     namespace = "com.openclassrooms.rebonnte"
     compileSdk = 34
@@ -12,12 +24,23 @@ android {
         applicationId = "com.openclassrooms.rebonnte"
         minSdk = 24
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = releaseVersionCode ?: 1
+        versionName = releaseVersionCode?.let { "1.0.$it" } ?: "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
             useSupportLibrary = true
+        }
+    }
+
+    if (isReleaseSigningConfigured) {
+        signingConfigs {
+            create("release") {
+                storeFile = rootProject.file(releaseStoreFile!!)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
         }
     }
 
@@ -26,6 +49,9 @@ android {
             enableUnitTestCoverage = true
         }
         release {
+            if (isReleaseSigningConfigured) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
