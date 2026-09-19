@@ -31,7 +31,9 @@ import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Search
@@ -68,6 +70,8 @@ import com.openclassrooms.rebonnte.ui.medicine.MedicineScreen
 import com.openclassrooms.rebonnte.ui.medicine.MedicineDetailActivity
 import com.openclassrooms.rebonnte.ui.medicine.MedicineViewModel
 import com.openclassrooms.rebonnte.ui.theme.RebonnteTheme
+import com.openclassrooms.rebonnte.ui.theme.isDarkThemeEnabled
+import com.openclassrooms.rebonnte.ui.theme.setDarkThemeEnabled
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.filterNotNull
 
@@ -101,7 +105,14 @@ fun MyApp(
     aisleViewModel: AisleViewModel,
     authViewModel: AuthViewModel
 ) {
+    val context = LocalContext.current
     val authState by authViewModel.uiState.collectAsState()
+    var isDarkTheme by rememberSaveable { mutableStateOf(context.isDarkThemeEnabled()) }
+
+    val onToggleDarkTheme = {
+        isDarkTheme = !isDarkTheme
+        context.setDarkThemeEnabled(isDarkTheme)
+    }
 
     LaunchedEffect(authState.isAuthenticated) {
         if (authState.isAuthenticated) {
@@ -110,22 +121,31 @@ fun MyApp(
         }
     }
 
-    RebonnteTheme {
+    RebonnteTheme(darkTheme = isDarkTheme) {
         if (authState.isAuthenticated) {
             StockApp(
                 medicineViewModel = medicineViewModel,
                 aisleViewModel = aisleViewModel,
                 userEmail = authState.userEmail,
-                onSignOut = authViewModel::signOut
+                onSignOut = authViewModel::signOut,
+                isDarkTheme = isDarkTheme,
+                onToggleDarkTheme = onToggleDarkTheme
             )
         } else {
-            AuthScreen(
-                errorMessage = authState.errorMessage,
-                isSubmitting = authState.isSubmitting,
-                onSignIn = authViewModel::signIn,
-                onCreateAccount = authViewModel::createAccount,
-                onErrorShown = authViewModel::clearError
-            )
+            Box(modifier = Modifier.fillMaxSize()) {
+                AuthScreen(
+                    errorMessage = authState.errorMessage,
+                    isSubmitting = authState.isSubmitting,
+                    onSignIn = authViewModel::signIn,
+                    onCreateAccount = authViewModel::createAccount,
+                    onErrorShown = authViewModel::clearError
+                )
+                ThemeToggleButton(
+                    isDarkTheme = isDarkTheme,
+                    onToggleDarkTheme = onToggleDarkTheme,
+                    modifier = Modifier.align(Alignment.TopEnd)
+                )
+            }
         }
     }
 }
@@ -136,7 +156,9 @@ private fun StockApp(
     medicineViewModel: MedicineViewModel,
     aisleViewModel: AisleViewModel,
     userEmail: String?,
-    onSignOut: () -> Unit
+    onSignOut: () -> Unit,
+    isDarkTheme: Boolean,
+    onToggleDarkTheme: () -> Unit
 ) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
@@ -163,7 +185,15 @@ private fun StockApp(
 
     Scaffold(
         topBar = {
-            MainTopBar(route, medicineViewModel, aisleViewModel, userEmail, onSignOut)
+            MainTopBar(
+                route,
+                medicineViewModel,
+                aisleViewModel,
+                userEmail,
+                onSignOut,
+                isDarkTheme,
+                onToggleDarkTheme
+            )
         },
         bottomBar = { MainBottomBar(route, navController) },
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -206,7 +236,9 @@ private fun MainTopBar(
     medicineViewModel: MedicineViewModel,
     aisleViewModel: AisleViewModel,
     userEmail: String?,
-    onSignOut: () -> Unit
+    onSignOut: () -> Unit,
+    isDarkTheme: Boolean,
+    onToggleDarkTheme: () -> Unit
 ) {
     var isMedicineSearchActive by rememberSaveable { mutableStateOf(false) }
     var medicineSearchQuery by rememberSaveable { mutableStateOf("") }
@@ -270,6 +302,7 @@ private fun MainTopBar(
                         }
                     }
                 }
+                ThemeToggleButton(isDarkTheme, onToggleDarkTheme)
                 IconButton(onClick = onSignOut) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.Logout,
@@ -300,6 +333,27 @@ private fun MainTopBar(
                 searchContentDescription = "Search medicines"
             )
         }
+    }
+}
+
+@Composable
+private fun ThemeToggleButton(
+    isDarkTheme: Boolean,
+    onToggleDarkTheme: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    IconButton(
+        onClick = onToggleDarkTheme,
+        modifier = modifier
+    ) {
+        Icon(
+            imageVector = if (isDarkTheme) Icons.Default.LightMode else Icons.Default.DarkMode,
+            contentDescription = if (isDarkTheme) {
+                "Activer le mode clair"
+            } else {
+                "Activer le mode sombre"
+            }
+        )
     }
 }
 
