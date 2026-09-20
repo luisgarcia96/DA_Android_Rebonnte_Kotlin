@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.compose.runtime.Composable
 
 import android.content.Intent
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -31,6 +32,7 @@ fun MedicineScreen(
     onClearAllData: () -> Unit
 ) {
     val medicines by viewModel.medicines.collectAsState(initial = emptyList())
+    val isLoading by viewModel.isLoading.collectAsState()
     val context = LocalContext.current
     val listState = rememberLazyListState()
     var visibleCount by rememberSaveable { mutableStateOf(PAGE_SIZE) }
@@ -55,55 +57,67 @@ fun MedicineScreen(
             }
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        Row {
-            TextButton(onClick = onAddTestData) {
-                Text("Add temporary test data")
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            Row {
+                TextButton(onClick = onAddTestData) {
+                    Text("Add temporary test data")
+                }
+                TextButton(onClick = { showClearDialog = true }) {
+                    Text("Clear all test data")
+                }
             }
-            TextButton(onClick = { showClearDialog = true }) {
-                Text("Clear all test data")
-            }
-        }
-        if (showClearDialog) {
-            AlertDialog(
-                onDismissRequest = { showClearDialog = false },
-                title = { Text("Clear all data") },
-                text = { Text("This removes all medicines and extra aisles.") },
-                confirmButton = {
-                    TextButton(onClick = {
-                        onClearAllData()
-                        showClearDialog = false
-                    }) {
-                        Text("Clear")
+            if (showClearDialog) {
+                AlertDialog(
+                    onDismissRequest = { showClearDialog = false },
+                    title = { Text("Clear all data") },
+                    text = { Text("This removes all medicines and extra aisles.") },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            onClearAllData()
+                            showClearDialog = false
+                        }) {
+                            Text("Clear")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showClearDialog = false }) {
+                            Text("Cancel")
+                        }
                     }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showClearDialog = false }) {
-                        Text("Cancel")
+                )
+            }
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                state = listState
+            ) {
+                items(medicines.take(visibleCount)) { medicine ->
+                    MedicineListItem(medicine = medicine, onClick = {
+                        startDetailActivity(context, medicine.name)
+                    })
+                }
+                if (visibleCount < medicines.size) {
+                    item {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator()
+                        }
                     }
                 }
-            )
-        }
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            state = listState
-        ) {
-            items(medicines.take(visibleCount)) { medicine ->
-                MedicineListItem(medicine = medicine, onClick = {
-                    startDetailActivity(context, medicine.name)
-                })
             }
-            if (visibleCount < medicines.size) {
-                item {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        CircularProgressIndicator()
-                    }
-                }
+        }
+        if (isLoading) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.72f)),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator()
             }
         }
     }

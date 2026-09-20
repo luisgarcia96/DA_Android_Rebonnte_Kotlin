@@ -12,6 +12,7 @@ import com.openclassrooms.rebonnte.ui.aisle.Aisle
 import com.openclassrooms.rebonnte.ui.history.History
 import com.openclassrooms.rebonnte.ui.history.HistoryRules
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -35,7 +36,10 @@ sealed interface MedicineOperationEvent {
     data object Failed : MedicineOperationEvent
 }
 
-class MedicineViewModel(application: Application) : AndroidViewModel(application) {
+class MedicineViewModel @JvmOverloads constructor(
+    application: Application,
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
+) : AndroidViewModel(application) {
     private val preferences = application.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
     private val firestore = FirebaseFirestore.getInstance()
     private val auth = FirebaseAuth.getInstance()
@@ -44,12 +48,14 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
     private var allMedicines: List<Medicine> = emptyList()
     private val _medicines = MutableStateFlow<List<Medicine>>(emptyList())
     val medicines: StateFlow<List<Medicine>> = _medicines.asStateFlow()
+    private val _isLoading = MutableStateFlow(false)
+    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
     private val _operationEvents = MutableSharedFlow<MedicineOperationEvent>()
     val operationEvents: SharedFlow<MedicineOperationEvent> = _operationEvents.asSharedFlow()
     private var searchQuery = ""
     private var sortOrder = MedicineSortOrder.NONE
     private var hasLoaded = false
-    private var isLoading = false
+    private var isReloading = false
 
     init {
         reload()
@@ -67,7 +73,7 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
                 name = medicineName,
                 stock = Random().nextInt(100),
                 nameAisle = aisles.random().name,
-                histories = listOf(createHistory(medicineName, "Medicine created", "Name: $medicineName"))
+                histories = listOf(createHistory(medicineName, MEDICINE_CREATED_ACTION, "Name: $medicineName"))
             )
             saveNewMedicine(medicine)
         }
@@ -78,7 +84,7 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
             val medicineWithHistory = medicine.copy(
                 histories = medicine.histories + createHistory(
                     medicine.name,
-                    "Medicine created",
+                    MEDICINE_CREATED_ACTION,
                     "Aisle: ${medicine.nameAisle}; initial stock: ${medicine.stock}"
                 )
             )
@@ -109,7 +115,7 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
                     histories = listOf(
                         createHistory(
                             "Test Medicine $number",
-                            "Medicine created",
+                            MEDICINE_CREATED_ACTION,
                             "Aisle: ${aisleNames[index % aisleNames.size]}; initial stock: ${number % 100}"
                         )
                     )
@@ -117,7 +123,7 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
             }
 
             runCatching {
-                withContext(Dispatchers.IO) {
+                withContext(ioDispatcher) {
                     val batch = firestore.batch()
                     testMedicines.forEach { medicine ->
                         batch.set(medicinesCollection.document(medicine.id), medicine.toDocument())
@@ -136,7 +142,7 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
     fun clearAllMedicines() {
         viewModelScope.launch {
             runCatching {
-                withContext(Dispatchers.IO) {
+                withContext(ioDispatcher) {
                     val batch = firestore.batch()
                     medicinesCollection.get().await().documents.forEach { document ->
                         batch.delete(document.reference)
@@ -205,7 +211,7 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
             )
 
             val operationEvent = runCatching {
-                withContext(Dispatchers.IO) {
+                withContext(ioDispatcher) {
                     val batch = firestore.batch()
                     batch.delete(medicinesCollection.document(deletedMedicine.id))
                     batch.set(deletedHistoriesCollection.document(), deletionHistory.toDocument())
@@ -287,13 +293,14 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun reload(force: Boolean = false) {
-        if (auth.currentUser == null || isLoading || (hasLoaded && !force)) return
+        if (auth.currentUser == null || isReloading || (hasLoaded && !force)) return
 
-        isLoading = true
+        isReloading = true
+        _isLoading.value = true
         viewModelScope.launch {
             try {
                 runCatching {
-                    withContext(Dispatchers.IO) {
+                    withContext(ioDispatcher) {
                         ensureSearchFields()
                         val remoteMedicines = medicineQuery().get().await().documents.mapNotNull { document ->
                             document.toMedicine()
@@ -315,7 +322,8 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
                     showError("Impossible de charger les médicaments depuis Firestore.")
                 }
             } finally {
-                isLoading = false
+                isReloading = false
+                _isLoading.value = false
             }
         }
     }
@@ -330,7 +338,7 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
         }.isSuccess
 
     private suspend fun saveMedicine(medicine: Medicine) {
-        withContext(Dispatchers.IO) {
+        withContext(ioDispatcher) {
             medicinesCollection.document(medicine.id).set(medicine.toDocument()).await()
         }
     }
@@ -488,6 +496,7 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
         val HISTORY_DATE_FORMAT = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
         const val MEDICINES_COLLECTION = "medicines"
         const val MEDICINES_KEY = "medicines"
+        const val MEDICINE_CREATED_ACTION = "Medicine created"
         const val MIGRATION_COMPLETE_KEY = "firestore_medicines_migration_complete"
         const val NAME_FIELD = "name"
         const val NORMALIZED_NAME_FIELD = "normalizedName"
