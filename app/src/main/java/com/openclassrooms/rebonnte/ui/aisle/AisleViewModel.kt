@@ -19,12 +19,14 @@ class AisleViewModel(application: Application) : AndroidViewModel(application) {
     private val auth = FirebaseAuth.getInstance()
     private val _aisles = MutableStateFlow<List<Aisle>>(emptyList())
     val aisles: StateFlow<List<Aisle>> = _aisles.asStateFlow()
+    private val _isLoading = MutableStateFlow(false)
+    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
     private var allAisles: List<Aisle> = emptyList()
     private var searchQuery = ""
     private var hasLoaded = false
-    private var isLoading = false
+    private var isReloading = false
 
     init {
         reload()
@@ -90,9 +92,10 @@ class AisleViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun reload(force: Boolean = false) {
-        if (auth.currentUser == null || isLoading || (hasLoaded && !force)) return
+        if (auth.currentUser == null || isReloading || (hasLoaded && !force)) return
 
-        isLoading = true
+        isReloading = true
+        _isLoading.value = true
         viewModelScope.launch {
             try {
                 runCatching {
@@ -115,7 +118,8 @@ class AisleViewModel(application: Application) : AndroidViewModel(application) {
                     showError("Impossible de charger les rayons depuis Firestore.")
                 }
             } finally {
-                isLoading = false
+                isReloading = false
+                _isLoading.value = false
             }
         }
     }
